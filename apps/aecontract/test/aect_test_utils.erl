@@ -402,7 +402,9 @@ encode_call_data(Code, Fun, Args) ->
 encode_call_data(Vsn, Code, Fun, Args) ->
     %% Lookup the res in the cache - if not present just calculate the result
     Backend = backend(Vsn),
-    CallId = #encode_call_id{vsn = Vsn, code_hash = crypto:hash(md5, Code), fun_name = Fun, args = Args, backend = Backend},
+    Args1 = string:join([ to_str(Arg) || Arg <- Args ], ", "),
+    Args2 = list_to_binary(to_str(Fun) ++ "(" ++ Args1 ++ ")"),
+    CallId = #encode_call_id{vsn = Vsn, code_hash = Code, fun_name = Fun, args = Args2, backend = Backend},
     case ets:lookup(?ENCODE_CALL_TAB, CallId) of
         [#encode_call_cache_entry{result = Result}] ->
             %% This should save 100ms - 300ms per invocation
@@ -451,7 +453,7 @@ create_calldata_args(Vsn, SrcFile, Fun, Args) ->
 
 decode_call_result(Code, Fun, Res, Value) ->
     %% Lookup the res in the cache - if not present just calculate the result
-    DecodeCallId = #decode_call_id{code_hash = crypto:hash(md5, Code), fun_name = Fun, res = Res, val = Value},
+    DecodeCallId = #decode_call_id{code_hash = Code, fun_name = {Fun, backend()}, res = Res, val = Value},
     case ets:lookup(?DECODE_CALL_TAB, DecodeCallId) of
         [#decode_call_cache_entry{result = Result}] ->
             %% This should save 10-30ms per invocation - this still saves time as some tests call this function >200 times mostly with the same args
