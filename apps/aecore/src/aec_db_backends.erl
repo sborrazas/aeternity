@@ -19,6 +19,7 @@
 
 %% Callbacks for aeu_mp_trees_db
 -export([ db_drop_cache/1
+        , db_list_cache/1
         , db_get/2
         , db_put/3
         ]).
@@ -69,6 +70,7 @@ db_spec(Type) ->
      , cache  => {gb_trees, gb_trees:empty()}
      , get    => {?MODULE, db_get}
      , put    => {?MODULE, db_put}
+     , list_cache => {?MODULE, db_list_cache}
      , drop_cache => {?MODULE, db_drop_cache}
      }.
 
@@ -120,3 +122,6 @@ db_put(Key, Val, oracles_cache = Handle) ->
 
 db_drop_cache({gb_trees, _}) ->
     gb_trees:empty().
+
+db_list_cache({gb_trees, T}) ->
+    gb_trees:to_list(T).

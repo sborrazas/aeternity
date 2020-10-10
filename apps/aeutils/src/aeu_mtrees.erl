@@ -40,11 +40,13 @@
          commit_to_db/1,
          new_with_backend/2,
          gc_cache/1,
+         list_cache/1,
          empty_with_backend/1
         ]).
 
 %% For internal functional db
 -export([ proof_db_drop_cache/1
+        , proof_db_list_cache/1
         , proof_db_get/2
         , proof_db_put/3
         ]).
@@ -109,6 +111,9 @@ new_with_backend(<<_:256>> = Hash, DB) ->
 gc_cache(Tree) ->
     aeu_mp_trees:gc_cache(Tree).
 
+list_cache(Tree) ->
+    aeu_mp_trees:list_cache(Tree).
+
 delete(Key, Tree) when ?IS_KEY(Key) ->
     aeu_mp_trees:delete(Key, Tree).
 
@@ -131,7 +136,7 @@ enter(Key, Value, Tree) when ?IS_KEY(Key), ?IS_VALUE(Value) ->
 
 insert(Key, Value, Tree) when ?IS_KEY(Key), ?IS_VALUE(Value) ->
     case lookup(Key, Tree) of
-        none -> aeu_mp_trees:put(Key, Value, Tree);
+        none -> enter(Key, Value, Tree);
         {value, _} -> error({already_present, Key})
     end.
 
@@ -265,6 +270,7 @@ proof_db_spec() ->
      , get    => {?MODULE, proof_db_get}
      , put    => {?MODULE, proof_db_put}
      , drop_cache => {?MODULE, proof_db_drop_cache}
+     , list_cache => {?MODULE, proof_db_list_cache}
      }.
 
 proof_db_get(Key, Proof) ->
@@ -275,6 +281,9 @@ proof_db_put(Key, Val, Proof) ->
 
 proof_db_drop_cache(_Cache) ->
     dict:new().
+
+proof_db_list_cache(Cache) ->
+    dict:to_list(Cache).
 
 %%%===================================================================
 %%% serialization

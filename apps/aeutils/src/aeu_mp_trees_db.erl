@@ -33,6 +33,7 @@
 -record(db, { handle :: handle()
             , cache  :: cache()
             , drop_cache :: drop_cache_mf()
+            , list_cache :: list_cache_mf()
             , get    :: get_mf()
             , put    :: put_mf()
             }).
@@ -62,6 +63,9 @@
 %% fun((cache()) -> cache()).
 -type drop_cache_mf() :: {module(), atom()}.
 
+%% fun((cache()) -> [{any(), any()}]).
+-type list_cache_mf() :: {module(), atom()}.
+
 %% ==================================================================
 %% Trace support
 record_fields(db) -> record_info(fields, db);
@@ -77,23 +81,32 @@ new(#{ 'get'    := GetMF
      , 'put'    := PutMF
      , 'cache'  := Cache
      , 'drop_cache' := DropCacheMF
+     , 'list_cache' := ListCacheMF
      , 'handle' := Handle
      }) ->
     validate_exported(put, PutMF, 3),
     validate_exported(get, GetMF, 2),
     validate_exported(drop_cache, DropCacheMF, 1),
+    validate_exported(list_cache, ListCacheMF, 1),
     #db{ get    = GetMF
        , put    = PutMF
        , cache  = Cache
        , drop_cache = DropCacheMF
+       , list_cache = ListCacheMF
        , handle = Handle
        }.
 
 validate_exported(Type, {M, F}, A) when is_atom(M), is_atom(F) ->
-    try lists:member({F, A}, M:module_info(exports)) of
-        true -> ok;
-        false -> error({invalid, Type, {M, F, A}})
-    catch _:_ ->
+    %% In the case where M is already loaded, this amounts to a call to
+    %% erlang:module_loaded/1 followed by the call to erlang:function_exported/3
+    case code:ensure_loaded(M) of
+        {module, _} ->
+            case erlang:function_exported(M, F, A) of
+                true -> ok;
+                false ->
+                    error({invalid, Type, {M, F, A}})
+            end;
+        {error, _} ->
             error({invalid, Type, {M, F, A}})
     end;
 validate_exported(Type, Other,_A) ->

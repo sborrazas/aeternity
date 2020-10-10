@@ -25,6 +25,7 @@
 -export([ proof_db_get/2
         , proof_db_put/3
         , proof_db_drop_cache/1
+        , proof_db_list_cache/1
         ]).
 
 -export_type([ poi/0
@@ -161,6 +162,7 @@ proof_db_spec() ->
      , get    => {?MODULE, proof_db_get}
      , put    => {?MODULE, proof_db_put}
      , drop_cache => {?MODULE, proof_db_drop_cache}
+     , list_cache => {?MODULE, proof_db_list_cache}
      }.
 
 proof_db_get(Key, Proof) ->
@@ -171,6 +173,9 @@ proof_db_put(Key, Val, Proof) ->
 
 proof_db_drop_cache(_Cache) ->
     error(no_drop_cache_in_proof).
+
+proof_db_list_cache(Cache) ->
+    gb_trees:to_list(Cache).
 
 proof_serialize_to_list(Proof) ->
     gb_trees:to_list(aeu_mp_trees_db:get_cache(Proof)).

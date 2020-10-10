@@ -22,6 +22,7 @@
         , lookup_contract/3
         , new_with_backend/1
         , gc_cache/1
+        , list_cache/1
         , root_hash/1]).
 
 %% API - Proof of inclusion
@@ -83,6 +84,9 @@ new_with_backend(Hash) ->
 -spec gc_cache(tree()) -> tree().
 gc_cache(#contract_tree{contracts = CtTree} = Tree) ->
     Tree#contract_tree{contracts =  aeu_mtrees:gc_cache(CtTree)}.
+
+list_cache(#contract_tree{contracts = CtTree}) ->
+    aeu_mtrees:list_cache(CtTree).
 
 %% -- Contracts --
 

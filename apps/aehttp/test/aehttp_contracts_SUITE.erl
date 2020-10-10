@@ -52,6 +52,8 @@
          paying_for_contract/1
         ]).
 
+-export([flags/0, patterns/0]).
+
 -define(NODE, dev1).
 -define(DEFAULT_TESTS_COUNT, 5).
 -define(DEFAULT_GAS_PRICE, aec_test_utils:min_gas_price()).
@@ -1424,6 +1426,9 @@ force_fun_calls(Node, MaxMinedBlocks) ->
     check_calls(Calls).
 
 dry_run_txs(Calls) ->
+    with_trace(fun dry_run_txs_/1, Calls, "dry_run", [always]).
+
+dry_run_txs_(Calls) ->
     Txs = [ #{tx => Tx} || {#{tx_encoded := Tx}, _} <- Calls ],
     {ok, 200, #{ <<"results">> := Results }} = dry_run(Txs),
     {ok, 200, #{ <<"results">> := Results
@@ -1787,12 +1792,40 @@ wait_for_tx_hash_on_chain(Node, TxHash) ->
             end
     end.
 
+flags() ->
+    aehttp_ttb:flags().
+
+patterns() ->
+    [ {aec_trees, apply_one_tx, '_', x}
+    , {aec_trees, apply_txs_on_state_trees, '_', x}
+    , {aec_trees, par_apply_txs_on_state_trees, '_', x}
+    , {aec_trees, proxy_client, '_', x}
+    , {aec_trees, tree_updates, '_', x}
+    , {aec_trees, root_hashes, '_', x}
+    , {aec_trees, get_tree, '_', x}
+    , {aect_state_tree, root_hash, '_', x}
+    , {aect_call_state_tree, root_hash, '_', x}
+    , {aesc_state_tree, root_hash, '_', x}
+    , {aens_state_tree, root_hash, '_', x}
+    , {aeo_state_tree, root_hash, '_', x}
+    , {aec_accounts_trees, root_hash, '_', x}
+    , {aec_trees_proxy, '_', '_', x}
+    , {aec_accounts_trees, x}
+    , {aeu_mtrees, get, '_', x}
+    , {aeu_mtrees, lookup, '_', x}
+    , {aeu_mp_trees, get, '_', x}
+    , {aeu_mp_trees, int_get, '_', x}
+    , {aeu_mp_trees, decode_node, '_', x}
+    , {aeu_mp_trees_db, get, '_', x}
+    , {aeu_mtrees, insert, '_', x}
+    | aehttp_ttb:patterns()].
+
 with_trace(F, Config, File) ->
     with_trace(F, Config, File, on_error).
 
 with_trace(F, Config, File, When) ->
     ct:log("with_trace ...", []),
-    TTBRes = aesc_ttb:on_nodes([node()|get_nodes()], File),
+    TTBRes = tr_ttb:on_nodes([node()|get_nodes()], File, ?MODULE),
     ct:log("Trace set up: ~p", [TTBRes]),
     try F(Config)
     catch E:R:Stack ->
@@ -1823,7 +1856,7 @@ ttb_stop() ->
     Dir = aesc_ttb:stop(),
     Out = filename:join(filename:dirname(Dir),
                         filename:basename(Dir) ++ ".txt"),
-    case aesc_ttb:format(Dir, Out, #{limit => 30000}) of
+    case aesc_ttb:format(Dir, Out, #{limit => 100000}) of
         {error, Reason} ->
             ct:pal("TTB formatting error: ~p", [Reason]);
         _ ->

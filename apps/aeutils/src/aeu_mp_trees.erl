@@ -15,6 +15,7 @@
         , db/1
         , delete/2
         , gc_cache/1
+        , list_cache/1
         , get/2
         , has_node/3
         , iterator/1
@@ -35,6 +36,7 @@
 
 %% For internal functional db
 -export([ dict_db_drop_cache/1
+        , dict_db_list_cache/1
         , dict_db_get/2
         , dict_db_put/3
         ]).
@@ -200,6 +202,8 @@ gc_cache(#mpt{db = DB, hash = Hash} = MPT) ->
     DB1 = int_visit_reachable_hashes_in_cache([Hash], DB, FreshDB, VisitFun),
     MPT#mpt{db = DB1}.
 
+list_cache(#mpt{db = DB}) ->
+    db_list_cache(DB).
 
 -spec construct_proof(key(), db(), tree()) -> {value(), db()}.
 construct_proof(Key, ProofDB, #mpt{db = DB, hash = Hash}) ->
@@ -1121,6 +1125,9 @@ db_commit_from_cache(Hash, RawNode, DB) ->
 db_drop_cache(DB) ->
     aeu_mp_trees_db:drop_cache(DB).
 
+db_list_cache(DB) ->
+    aeu_mp_trees_db:list_cache(DB).
+
 %%%===================================================================
 %%% Dict db backend (default if nothing else was given in new/2)
 
@@ -1133,6 +1140,7 @@ dict_db_spec() ->
      , get    => {?MODULE, dict_db_get}
      , put    => {?MODULE, dict_db_put}
      , drop_cache => {?MODULE, dict_db_drop_cache}
+     , list_cache => {?MODULE, dict_db_list_cache}
      }.
 
 dict_db_get(Key, Dict) ->
@@ -1146,6 +1154,9 @@ dict_db_put(Key, Val, Dict) ->
 
 dict_db_drop_cache(_Cache) ->
     dict:new().
+
+dict_db_list_cache(Cache) ->
+    dict:to_list(Cache).
 
 %%%===================================================================
 %%% Compact encoding of hex sequence with optional terminator

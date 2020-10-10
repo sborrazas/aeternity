@@ -50,7 +50,7 @@ dry_run_int([{tx, TxOpts, Tx} | Txs], Trees, Env, Opts, Acc) ->
     Env1 = prepare_env(Env, TxOpts),
     %% GH3283: Here we should collect and present the `internal_call_tx` events.
     %% This means expanding the return type, and breaking the api :scream_cat:.
-    case aec_trees:apply_txs_on_state_trees([Tx], Trees, Env1, [strict, dont_verify_signature|Opts]) of
+    case aec_trees:apply_txs_on_state_trees([Tx], Trees, Env1, [parallel,strict, dont_verify_signature|Opts]) of
         {ok, [Tx], [], Trees1, Events} when Stateless ->
             lager:debug("Events = ~p", [Events]),
             Env2 = aetx_env:set_events(Env, Events),
