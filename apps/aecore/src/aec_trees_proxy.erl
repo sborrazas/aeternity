@@ -33,10 +33,6 @@
             , invalid = [] :: [pid()]
             , events  = [] :: aetx_env:events()}).
 
--record(tree, { handle :: any()
-              , proxy  :: pid()
-              , cache  :: ets:table() }).
-
 -spec start_monitor(aec_trees:trees(), aetx_env:events()) -> {ok, {pid(), reference()}}.
 -if(?OTP_RELEASE >= 23).
 start_monitor(Trees, Events) ->
@@ -51,55 +47,66 @@ start_monitor(Trees, Events) ->
 register_clients(Proxy, Clients) ->
     gen_server:cast(Proxy, {clients, Clients}).
 
--spec client_tree(type(), pid(), {binary(), binary()}) -> aec_trees:trees().
-client_tree(Type, Pid, {RootHash, _} = Root) ->
+-spec client_tree(type(), pid(), empty | {binary(), binary()}) -> aeu_mtrees:mtree().
+client_tree(Type, Pid, empty) ->
     aeu_mtrees:new_with_backend(
-      RootHash,
-      aeu_mp_trees_db:new(db_spec(Type, Pid, Root))).
+      empty,
+      aeu_mp_trees_db:new(db_spec(Type, Pid)));
+client_tree(Type, Pid, RootHash) ->
+    aeu_mtrees:new_with_backend(
+      {proxy, RootHash},
+      aeu_mp_trees_db:new(db_spec(Type, Pid))).
 
-db_spec(Type, Pid, {RootHash, Value}) ->
+db_spec(Type, Pid) ->
+    Cache = new_cache(),
     #{ handle => {Type, Pid}
-     , cache  => new_cache(RootHash, Value)
+     , cache  => Cache
      , get    => {?MODULE, proxy_get}
      , put    => {?MODULE, proxy_put}
      , drop_cache => {?MODULE, proxy_drop_cache}
      , list_cache => {?MODULE, proxy_list_cache}
      }.
 
-proxy_put(Key, Value, #tree{cache = Cache} = Tree) ->
-    ets:insert(Cache, {Key, write, {value, Value}}),
-    Tree.
+-define(CACHE(C), {ets, _} = C).
 
-proxy_get(Key, #tree{handle = Handle, cache = Cache, proxy = P}) ->
-    case ets:lookup(Cache, Key) of
-        [{_, _, Res}] -> Res;
+proxy_put(Key, Value, ?CACHE(Cache)) ->
+    cache_insert(Cache, {Key, write, {value, Value}}),
+    Cache;
+proxy_put(_Key, _Value, {_Type, _P, ?CACHE(_Cache)}) ->
+    %% needed?
+    error(nyi).
+
+proxy_get(Key, ?CACHE(Cache)) ->
+    case cache_lookup(Cache, Key) of
+        [{_, _, Res}] ->
+            Res;
         [] ->
-            Res = gen_server:call(P, {?MODULE, get, Handle, Key}),
-            ets:insert(Cache, {Key, read, Res}),
-            Res
-    end.
+            none
+    end;
+proxy_get(Key, {Type, P, ?CACHE(Cache)}) ->
+    Res = gen_server:call(P, {?MODULE, get, Type, Key}),
+    cache_insert(Cache, {Key, read, Res}),
+    Res.
 
-proxy_enter(Key, Val, #tree{cache = Cache} = T) ->
-    ets:insert(Cache, {Key, write, {value, Val}}),
-    T.
+proxy_drop_cache(?CACHE(Cache)) ->
+    cache_clear(Cache),
+    Cache.
 
-proxy_delete(Key, #tree{cache = Cache} = T) ->
-    ets:insert(Cache, {Key, delete, none}),
-    T.
+proxy_list_cache(?CACHE(Cache)) ->
+    {ets, Tab} = Cache,
+    ets:select(Tab, [ {{'$1', write, {value, '$2'}}, [], [{{'$1', '$2'}}]} ]).
 
-proxy_drop_cache(#tree{cache = Cache} = T) ->
-    [{RootHash, _, Value}] = ets:lookup(Cache, root_hash),
-    ets:delete(Cache),
-    T#tree{ cache = new_cache(RootHash, Value) }.
+new_cache() ->
+    {ets, ets:new(proxy_cache, [ordered_set])}.
 
-proxy_list_cache(#tree{ cache = Cache }) ->
-    ets:select(Cache, [ {{'$1', write, {value, '$2'}}, [], [{{'$1', '$2'}}]} ]).
+cache_insert({ets, Tab}, Obj) ->
+    ets:insert(Tab, Obj).
 
-new_cache(RootHash, Value) ->
-    T = ets:new(proxy_cache, [ordered_set]),
-    ets:insert(T, {root_hash, read, {value, Value}}),
-    ets:insert(T, {RootHash, read, {value, Value}}),
-    T.
+cache_lookup({ets, Tab}, Key) ->
+    ets:lookup(Tab, Key).
+
+cache_clear({ets, Tab}) ->
+    ets:delete_all_objects(Tab).
 
 %% ======================================================================
 %% Gen_server side
@@ -192,9 +199,9 @@ int_get(Type, Key, Trees) ->
                    end).
 
 int_put(Type, Key, Value, Trees) ->
-    Tree = aec_trees:get_tree(Type, Trees),
+    Tree = aec_trees:get_mtree(Type, Trees),
     Tree1 = aec_db:ensure_activity(
               async_dirty, fun() -> aeu_mtrees:enter(Key, Value, Tree) end),
-    {ok, aec_trees:set_tree(Type, Tree1, Trees)}.
+    {ok, aec_trees:set_mtree(Type, Tree1, Trees)}.
 
      

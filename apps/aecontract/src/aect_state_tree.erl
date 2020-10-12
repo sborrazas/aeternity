@@ -21,6 +21,8 @@
         , lookup_contract/2
         , lookup_contract/3
         , new_with_backend/1
+        , proxy_tree/1
+        , get/2
         , gc_cache/1
         , list_cache/1
         , root_hash/1]).
@@ -32,6 +34,10 @@
         ]).
 
 -export([ to_list/1
+        ]).
+
+-export([ get_mtree/1
+        , set_mtree/2
         ]).
 
 -export([ from_binary_without_backend/1
@@ -80,6 +86,14 @@ empty_with_backend() ->
 new_with_backend(Hash) ->
     CtTree = aeu_mtrees:new_with_backend(Hash, aec_db_backends:contracts_backend()),
     #contract_tree{contracts = CtTree}.
+
+-spec proxy_tree(contract_tree()) -> tree().
+proxy_tree(Tree) ->
+    #contract_tree{contracts = Tree}.
+
+-spec get(aec_keys:pubkey(), tree()) -> binary().
+get(Key, #contract_tree{contracts = CtTree}) ->
+    aeu_mtrees:get(Key, CtTree).
 
 -spec gc_cache(tree()) -> tree().
 gc_cache(#contract_tree{contracts = CtTree} = Tree) ->
@@ -303,6 +317,14 @@ lookup_poi(Pubkey, Poi) ->
 -spec to_list(tree()) -> [{term(), term()}].
 to_list(#contract_tree{contracts = CtTree}) ->
     aeu_mtrees:to_list(CtTree).
+
+-spec get_mtree(tree()) -> aeu_mtrees:mtree().
+get_mtree(#contract_tree{contracts = CtTree}) ->
+    CtTree.
+
+-spec set_mtree(aeu_mtrees:mtree(), tree()) -> tree().
+set_mtree(CtTree, #contract_tree{} = T) ->
+    T#contract_tree{contracts = CtTree}.
 
 lookup_store_poi(Id, Poi) ->
     case aec_poi:read_only_subtree(Id, Poi) of

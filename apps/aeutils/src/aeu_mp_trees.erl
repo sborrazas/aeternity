@@ -123,7 +123,12 @@ new() ->
 new(DB) ->
     #mpt{db = DB}.
 
--spec new(hash(), db()) -> tree().
+-spec new(hash() | {proxy, hash()}, db()) -> tree().
+new({proxy, RootHash}, DB) ->
+    %% Just assume that the root hash is present
+    #mpt{ hash = RootHash
+        , db   = DB
+        };
 new(RootHash, DB) ->
     %% Assert that at least the root hash is present in the db.
     _ = db_get(RootHash, DB),
@@ -202,6 +207,7 @@ gc_cache(#mpt{db = DB, hash = Hash} = MPT) ->
     DB1 = int_visit_reachable_hashes_in_cache([Hash], DB, FreshDB, VisitFun),
     MPT#mpt{db = DB1}.
 
+-spec list_cache(tree()) -> [{any(), any()}].
 list_cache(#mpt{db = DB}) ->
     db_list_cache(DB).
 

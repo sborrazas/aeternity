@@ -23,6 +23,8 @@
          contracts/1,
          get_tree/2,
          set_tree/3,
+         get_mtree/2,
+         set_mtree/3,
          set_accounts/2,
          set_calls/2,
          set_channels/2,
@@ -68,6 +70,13 @@
          internal_serialize_poi_from_fields/1
         ]).
 -endif.
+
+-type tree() :: aec_accounts_trees:tree()
+              | aec_call_state_tree:tree()
+              | aesc_state_tree:tree()
+              | aect_state_tree:tree()
+              | aens_state_tree:tree()
+              | aeo_state_tree:tree().
 
 -record(trees, {
           accounts  :: aec_accounts_trees:tree(),
@@ -293,6 +302,33 @@ set_tree(calls, T, Trees)     -> set_calls(Trees, T);
 set_tree(accounts, T, Trees)  -> set_accounts(Trees, T);
 set_tree(contracts, T, Trees) -> set_contracts(Trees, T).
 
+get_mtree(contracts, Trees) ->
+    aect_state_tree:get_mtree(contracts(Trees));
+get_mtree(ns, Trees) ->
+    aens_state_tree:get_mtree(ns(Trees));
+get_mtree(calls, Trees) ->
+    aect_call_state_tree:get_mtree(calls(Trees));
+get_mtree(oracles, Trees) ->
+    aeo_state_tree:get_mtree(oracles(Trees));
+get_mtree(channels, Trees) ->
+    aesc_state_tree:get_mtree(channels(Trees));
+get_mtree(accounts, Trees) ->
+    aec_accounts_trees:get_mtree(accounts(Trees)).
+
+set_mtree(contracts, T, Trees) ->
+    set_contracts(Trees, aect_state_tree:set_mtree(T, contracts(Trees)));
+set_mtree(ns, T, Trees) ->
+    set_ns(Trees, aens_state_tree:set_mtree(T, ns(Trees)));
+set_mtree(calls, T, Trees) ->
+    set_calls(Trees, aect_call_state_tree:set_mtree(T, calls(Trees)));
+set_mtree(oracles, T, Trees) ->
+    set_oracles(Trees, aeo_state_tree:set_mtree(T, oracles(Trees)));
+set_mtree(channels, T, Trees) ->
+    set_channels(Trees, aesc_state_tree:set_mtree(T, channels(Trees)));
+set_mtree(accounts, T, Trees) ->
+    set_accounts(Trees, aec_accounts_trees:set_mtree(T, accounts(Trees))).
+
+
 -spec calls(trees()) -> aect_call_state_tree:tree().
 calls(Trees) ->
     Trees#trees.calls.
@@ -413,20 +449,64 @@ sum_auctions({AuctionHash, SerAuction, Iter}, Acc) ->
 root_hashes(Trees) ->
     lists:foldl(
       fun({Type, Mod}, Acc) ->
-              Acc#{Type => Mod:root_hash(get_tree(Type, Trees))}
+              Acc#{Type => root_hash(Mod, get_tree(Type, Trees))}
       end, #{}, types()).
 
+-type maybe_hash() :: empty | binary().
+
+-spec root_hash(tree_type(), tree()) -> maybe_hash() | {maybe_hash(), maybe_hash()}.
+root_hash(aens_state_tree, Tree) ->
+    {maybe_hash(aens_state_tree:root_hash(Tree)),
+     maybe_hash(aens_state_tree:cache_root_hash(Tree))};
+root_hash(aeo_state_tree, Tree) ->
+    {maybe_hash(aeo_state_tree:root_hash(Tree)),
+     maybe_hash(aeo_state_tree:cache_root_hash(Tree))};
+root_hash(Mod, Tree) ->
+    maybe_hash(Mod:root_hash(Tree)).
+
+maybe_hash({error, empty}) ->
+    empty;
+maybe_hash({ok, Hash}) ->
+    Hash.
+
+%% proxy_client(Pid, Roots) ->
 proxy_client(Pid, Roots) ->
     #trees{ contracts = ctree(contracts, Pid, maps:get(contracts, Roots))
-          , calls     = ctree(calls, Pid, maps:get(calls, Roots))
-          , channels  = ctree(channels, Pid, maps:get(channels, Roots))
-          , ns        = ctree(ns, Pid, maps:get(ns, Roots))
-          , oracles   = ctree(oracles, Pid, maps:get(oracles, Roots))
-          , accounts  = ctree(accounts, Pid, maps:get(accounts, Roots))
+          , calls     = ctree(calls    , Pid, maps:get(calls    , Roots))
+          , channels  = ctree(channels , Pid, maps:get(channels , Roots))
+          , ns        = ctree(ns       , Pid, maps:get(ns       , Roots))
+          , oracles   = ctree(oracles  , Pid, maps:get(oracles  , Roots))
+          , accounts  = ctree(accounts , Pid, maps:get(accounts , Roots))
           }.
+    %% #trees{ contracts = ctree(contracts, Pid, maps:get(contracts, Roots))
+    %%       , calls     = ctree(calls, Pid, maps:get(calls, Roots))
+    %%       , channels  = ctree(channels, Pid, maps:get(channels, Roots))
+    %%       , ns        = ctree(ns, Pid, maps:get(ns, Roots))
+    %%       , oracles   = ctree(oracles, Pid, maps:get(oracles, Roots))
+    %%       , accounts  = ctree(accounts, Pid, maps:get(accounts, Roots))
+    %%       }.
 
-ctree(Tag, Pid, Root) ->
-    aec_trees_proxy:client_tree(Tag, Pid, Root).
+%% ctree(Tag, Pid, Root) ->
+%%     aec_trees_proxy:client_tree(Tag, Pid, Root).
+ctree(contracts = Tag, Pid, RootHash) ->
+    aect_state_tree:proxy_tree(ctree_(Tag, Pid, RootHash));
+ctree(calls = Tag, Pid, RootHash) ->
+    aect_call_state_tree:proxy_tree(ctree_(Tag, Pid, RootHash));
+ctree(channels = Tag, Pid, RootHash) ->
+    aesc_state_tree:proxy_tree(ctree_(Tag, Pid, RootHash));
+ctree(ns, Pid, {MRootHash, CacheRootHash}) ->
+    MTree = ctree_(ns, Pid, MRootHash),
+    CTree = ctree_(ns_cache, Pid, CacheRootHash),
+    aens_state_tree:proxy_tree(MTree, CTree);
+ctree(oracles, Pid, {RootHash, CRootHash}) ->
+    MTree = ctree_(oracles, Pid, RootHash),
+    CTree = ctree_(oracles_cache, Pid, CRootHash),
+    aeo_state_tree:proxy_tree(MTree, CTree);
+ctree(accounts = Tag, Pid, RootHash) ->
+    aec_accounts_trees:proxy_tree(ctree_(Tag, Pid, RootHash)).
+
+ctree_(Tag, Pid, RootHash) ->
+    aec_trees_proxy:client_tree(Tag, Pid, RootHash).
 
 tree_updates(Trees) ->
     lists:foldr(fun({Type, Mod}, Acc) ->
@@ -743,9 +823,7 @@ one_tx(SignedTx, Trees, Env, DontVerify, Protocol) ->
             aetx:process(Tx, Trees, Env1);
         {error, signature_check_failed} = E ->
             lager:debug("Signed tx ~p is not correctly signed.", [SignedTx]),
-            E;
-        {error, _} = Error ->
-            Error
+            E
     end.
 
 verify_signature(_, _, _, true)               -> ok;

@@ -8,6 +8,9 @@
 %% API - similar to OTP `gb_trees` module
 -export([empty/0,
          empty_with_backend/0,
+         proxy_tree/1,
+         get_mtree/1,
+         set_mtree/2,
          get/2,
          lookup/2,
          new_with_backend/1,
@@ -62,6 +65,16 @@ empty_with_backend() ->
 -spec new_with_backend(aeu_mtrees:root_hash() | 'empty') -> tree().
 new_with_backend(Hash) ->
     aeu_mtrees:new_with_backend(Hash, aec_db_backends:accounts_backend()).
+
+-spec proxy_tree(aeu_mtrees:mtree()) -> tree().
+proxy_tree(Tree) ->
+    Tree.
+
+get_mtree(Tree) ->
+    Tree.
+
+set_mtree(Tree, _) ->
+    Tree.
 
 -spec gc_cache(tree()) -> tree().
 gc_cache(Tree) ->

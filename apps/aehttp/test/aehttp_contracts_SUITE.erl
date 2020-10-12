@@ -1811,12 +1811,14 @@ patterns() ->
     , {aec_accounts_trees, root_hash, '_', x}
     , {aec_trees_proxy, '_', '_', x}
     , {aec_accounts_trees, x}
+    , {aeu_mtrees, new_with_backend, x}
     , {aeu_mtrees, get, '_', x}
     , {aeu_mtrees, lookup, '_', x}
     , {aeu_mp_trees, get, '_', x}
     , {aeu_mp_trees, int_get, '_', x}
     , {aeu_mp_trees, decode_node, '_', x}
     , {aeu_mp_trees_db, get, '_', x}
+    , {aeu_mp_trees_db, new, x}
     , {aeu_mtrees, insert, '_', x}
     | aehttp_ttb:patterns()].
 

@@ -101,9 +101,13 @@ empty() ->
 empty_with_backend(DB) ->
     aeu_mp_trees:new(DB).
 
--spec new_with_backend(root_hash() | 'empty', aeu_mp_trees_db:db()) -> mtree().
+-spec new_with_backend( root_hash()
+                      | 'empty'
+                      | {proxy, root_hash()}, aeu_mp_trees_db:db()) -> mtree().
 new_with_backend(empty, DB) ->
     empty_with_backend(DB);
+new_with_backend({proxy, _} = Proxy, DB) ->
+    aeu_mp_trees:new(Proxy, DB);
 new_with_backend(<<_:256>> = Hash, DB) ->
     aeu_mp_trees:new(Hash, DB).
 

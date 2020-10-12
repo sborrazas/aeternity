@@ -17,6 +17,7 @@
         , put/3
         , cache_get/2
         , drop_cache/1
+        , list_cache/1
         , new/1
         , is_db/1
         , get_cache/1
@@ -44,6 +45,7 @@
                     , 'put'    := put_mf()
                     , 'cache'  := cache()
                     , 'drop_cache' := drop_cache_mf()
+                    , 'list_cache' := list_cache_mf()
                     , 'handle' := handle()
                     }.
 
@@ -128,6 +130,10 @@ cache_get(Key, DB) ->
 drop_cache(DB) ->
     int_drop_cache(DB).
 
+-spec list_cache(db()) -> [{key(), value()}].
+list_cache(DB) ->
+    int_list_cache(DB).
+
 -spec put(key(), value(), db()) -> db().
 put(Key, Val, DB) ->
     int_cache_put(Key, Val, DB).
@@ -163,6 +169,9 @@ int_cache_put(Key, Val, #db{cache = Cache, put = {M, F}} = DB) ->
 
 int_drop_cache(#db{drop_cache = {M, F}, cache = Cache} = DB) ->
     DB#db{cache = M:F(Cache)}.
+
+int_list_cache(#db{list_cache = {M, F}, cache = Cache}) ->
+    M:F(Cache).
 
 %%%===================================================================
 %%% DB
