@@ -120,5 +120,6 @@ serialization_template(?VSN) ->
 mtree_iterator(Tree) ->
     aeu_mtrees:iterator(Tree).
 
+-spec list_cache(tree()) -> [{term(), term()}].
 list_cache(Tree) ->
     aeu_mtrees:list_cache(Tree).

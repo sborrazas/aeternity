@@ -523,8 +523,13 @@ types() ->
     , {accounts, aec_accounts_trees}].
 
 do_list_updates(Type, Mod, Trees) ->
-    Tree = get_tree(Type, Trees),
-    Mod:list_cache(Tree).
+    MTree = get_mtree(Type, Trees),
+    case aeu_mtrees:root_hash(MTree) of
+        {error, empty} ->
+            {<<>>, []};
+        {ok, RootHash} ->
+            {RootHash, Mod:list_cache(MTree)}
+    end.
 
 %%%=============================================================================
 %%% Serialization for db storage
@@ -725,22 +730,27 @@ par_apply_txs_on_state_trees(SignedTxs, Valid, Invalid, Trees, Env, Opts) ->
     aec_trees_proxy:register_clients(Proxy, [P || {P,_} <- Pids]),
     receive
         {'DOWN', MRef, process, Proxy, Result} ->
-            case Result of
-                {ok, ValidPids, InvalidPids, Trees1, Events1} ->
-                    ValidTxs = fetch_txs(ValidPids, Pids),
-                    InvalidTxs = fetch_txs(InvalidPids, Pids),
-                    {ok, Valid ++ ValidTxs, Invalid ++ InvalidTxs, Trees1, Events1};
-                {error, _Reason} = Error ->
-                    Error;
-                _Other ->
-                    %% to be safe
-                    [exit(P, kill) || {P, _} <- Pids],
-                    if Strict ->
-                            {error, internal_error};
-                       true ->
-                            {ok, _ValidTxs = [], _InvalidTxs = SignedTxs,
-                             Trees, Events}
-                    end
+            check_par_apply_result(Result, Valid, Invalid, Trees, Env, Events,
+                                   SignedTxs, Strict, Pids)
+    end.
+
+check_par_apply_result(Result, Valid, Invalid, Trees, Env, Events,
+                       SignedTxs, Strict, Pids) ->
+    case Result of
+        {ok, {ValidPids, InvalidPids, Trees1, Events1}} ->
+            ValidTxs = fetch_txs(ValidPids, Pids),
+            InvalidTxs = fetch_txs(InvalidPids, Pids),
+            {ok, Valid ++ ValidTxs, Invalid ++ InvalidTxs, Trees1, Events1};
+        {error, _Reason} = Error ->
+            Error;
+        _Other ->
+            %% to be safe
+            [exit(P, kill) || {P, _} <- Pids],
+            if Strict ->
+                    {error, internal_error};
+               true ->
+                    {ok, _ValidTxs = [], _InvalidTxs = SignedTxs,
+                     Trees, Events}
             end
     end.
 

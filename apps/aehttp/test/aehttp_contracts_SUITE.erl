@@ -1426,11 +1426,14 @@ force_fun_calls(Node, MaxMinedBlocks) ->
     check_calls(Calls).
 
 dry_run_txs(Calls) ->
-    with_trace(fun dry_run_txs_/1, Calls, "dry_run", [always]).
+%%     with_trace(fun dry_run_txs_/1, Calls, "dry_run", always).
 
-dry_run_txs_(Calls) ->
+%% dry_run_txs_(Calls) ->
     Txs = [ #{tx => Tx} || {#{tx_encoded := Tx}, _} <- Calls ],
-    {ok, 200, #{ <<"results">> := Results }} = dry_run(Txs),
+    {ok, 200, #{ <<"results">> := Results }} =
+        with_trace(fun(_) -> dry_run(Txs) end, [], "dry_run", always),
+    {ok, 200, #{ <<"results">> := Results }} =
+        with_trace(fun(_) -> dry_run_parallel(Txs) end, [], "dry_run_par", always),
     {ok, 200, #{ <<"results">> := Results
                , <<"tx_events">> := TxEvents }} = dry_run_w_events(Txs),
     ct:log("TxEvents = ~p", [TxEvents]),
@@ -1669,8 +1672,15 @@ get_micro_block_header(Hash) ->
                  ++ "/header", []).
 
 dry_run(Txs) ->
+    ct:log("Normal dry-run", []),
     Host = internal_address(),
     http_request(Host, post, "debug/transactions/dry-run", #{txs => Txs}).
+
+dry_run_parallel(Txs) ->
+    ct:log("Parallel dry-run", []),
+    Host = internal_address(),
+    http_request(Host, post, "debug/transactions/dry-run", #{ txs => Txs
+                                                            , parallel => true }).
 
 dry_run_w_events(Txs) ->
     Host = internal_address(),
@@ -1799,10 +1809,13 @@ patterns() ->
     [ {aec_trees, apply_one_tx, '_', x}
     , {aec_trees, apply_txs_on_state_trees, '_', x}
     , {aec_trees, par_apply_txs_on_state_trees, '_', x}
+    , {aec_trees, check_par_apply_result, x}
     , {aec_trees, proxy_client, '_', x}
     , {aec_trees, tree_updates, '_', x}
+    , {aec_trees, do_list_updates, '_', x}
     , {aec_trees, root_hashes, '_', x}
-    , {aec_trees, get_tree, '_', x}
+    , {aec_trees, get_mtree, '_', x}
+    , {aec_trees, set_mtree, '_', []}
     , {aect_state_tree, root_hash, '_', x}
     , {aect_call_state_tree, root_hash, '_', x}
     , {aesc_state_tree, root_hash, '_', x}
@@ -1820,6 +1833,7 @@ patterns() ->
     , {aeu_mp_trees_db, get, '_', x}
     , {aeu_mp_trees_db, new, x}
     , {aeu_mtrees, insert, '_', x}
+    , {aec_dry_run, dry_run, []}
     | aehttp_ttb:patterns()].
 
 with_trace(F, Config, File) ->
@@ -1829,22 +1843,22 @@ with_trace(F, Config, File, When) ->
     ct:log("with_trace ...", []),
     TTBRes = tr_ttb:on_nodes([node()|get_nodes()], File, ?MODULE),
     ct:log("Trace set up: ~p", [TTBRes]),
-    try F(Config)
-    catch E:R:Stack ->
-        case E of
-            error ->
-                ct:pal("Error ~p~nStack = ~p", [R, Stack]),
-                ttb_stop(),
-                erlang:error(R);
-            exit ->
-                ct:pal("Exit ~p~nStack = ~p", [R, Stack]),
-                ttb_stop(),
-                exit(R);
-            throw ->
-                ct:pal("Caught throw:~p", [R]),
-                throw(R)
-        end
-    end,
+    Res = try F(Config)
+          catch E:R:Stack ->
+                  case E of
+                      error ->
+                          ct:pal("Error ~p~nStack = ~p", [R, Stack]),
+                          ttb_stop(),
+                          erlang:error(R);
+                      exit ->
+                          ct:pal("Exit ~p~nStack = ~p", [R, Stack]),
+                          ttb_stop(),
+                          exit(R);
+                      throw ->
+                          ct:pal("Caught throw:~p", [R]),
+                          throw(R)
+                  end
+          end,
     case When of
         on_error ->
             ct:log("Discarding trace", []),
@@ -1852,7 +1866,7 @@ with_trace(F, Config, File, When) ->
         always ->
             ttb_stop()
     end,
-    ok.
+    Res.
 
 ttb_stop() ->
     Dir = aesc_ttb:stop(),

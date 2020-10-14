@@ -99,6 +99,7 @@ get(Key, #contract_tree{contracts = CtTree}) ->
 gc_cache(#contract_tree{contracts = CtTree} = Tree) ->
     Tree#contract_tree{contracts =  aeu_mtrees:gc_cache(CtTree)}.
 
+-spec list_cache(tree()) -> [{term(), term()}].
 list_cache(#contract_tree{contracts = CtTree}) ->
     aeu_mtrees:list_cache(CtTree).
 

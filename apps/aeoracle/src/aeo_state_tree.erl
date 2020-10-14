@@ -10,6 +10,7 @@
 %% API
 -export([ cache_root_hash/1
         , commit_to_db/1
+        , list_cache/1
         , get_query/3
         , get_oracle/2
         , get_oracle_query_ids/2
@@ -222,6 +223,11 @@ commit_to_db(#oracle_tree{otree = OTree, cache = Cache} = Tree) ->
     Tree#oracle_tree{otree = aeu_mtrees:commit_to_db(OTree),
                      cache = aeu_mtrees:commit_to_db(Cache)
                     }.
+
+-spec list_cache(tree()) -> [{term(), term()}].
+list_cache(Tree) ->
+    aeu_mtrees:list_cache(Tree).
+     
 
 %%%===================================================================
 %%% Internal functions

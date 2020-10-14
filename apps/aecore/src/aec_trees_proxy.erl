@@ -33,12 +33,15 @@
             , invalid = [] :: [pid()]
             , events  = [] :: aetx_env:events()}).
 
+-include_lib("mnesia/src/mnesia.hrl").
+
 -spec start_monitor(aec_trees:trees(), aetx_env:events()) -> {ok, {pid(), reference()}}.
 -if(?OTP_RELEASE >= 23).
 start_monitor(Trees, Events) ->
     gen_server:start_monitor(?MODULE, {Trees, Events}, []).
 -else.
 start_monitor(Trees, Events) ->
+    _TStore = get_tstore(),
     {ok, Pid} = gen_server:start(?MODULE, {Trees, Events}, []),
     MRef = monitor(process, Pid),
     {ok, {Pid, MRef}}.
@@ -49,17 +52,19 @@ register_clients(Proxy, Clients) ->
 
 -spec client_tree(type(), pid(), empty | {binary(), binary()}) -> aeu_mtrees:mtree().
 client_tree(Type, Pid, empty) ->
+    %% aeu_mtrees:proxy_tree(?MODULE, {Type, Pid, empty});
     aeu_mtrees:new_with_backend(
       empty,
       aeu_mp_trees_db:new(db_spec(Type, Pid)));
 client_tree(Type, Pid, RootHash) ->
+    %% aeu_mtrees:proxy_tree(?MODULE, {Type, Pid, RootHash}).
     aeu_mtrees:new_with_backend(
       {proxy, RootHash},
       aeu_mp_trees_db:new(db_spec(Type, Pid))).
 
 db_spec(Type, Pid) ->
     Cache = new_cache(),
-    #{ handle => {Type, Pid}
+    #{ handle => {Type, Pid, Cache}
      , cache  => Cache
      , get    => {?MODULE, proxy_get}
      , put    => {?MODULE, proxy_put}
@@ -138,8 +143,8 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #st{ clients = [Pid | Cs]
             {ok, Updates, NewEvents} ->
                 {true,
                  lists:foldl(
-                   fun({Type, Key, Value}, Ts) ->
-                           int_put(Type, Key, Value, Ts)
+                   fun({Type, {Hash, Values}}, Ts) ->
+                           apply_updates(Type, Hash, Values, Ts)
                    end, Trees, Updates),
                  Events ++ NewEvents};
             _ ->
@@ -186,22 +191,39 @@ serve_pending(#st{ clients = [Pid | _]
     end.
 
 handle_req({?MODULE, get, Type, Key}, Trees) ->
-    {int_get(Type, Key, Trees), Trees};
-handle_req({?MODULE, put, Type, Key, Value}, Trees) ->
-    %% TODO: is this right?
-    {ok, int_put(Type, Key, Value, Trees)}.
+    {int_get(Type, Key, Trees), Trees}.
 
 int_get(Type, Key, Trees) ->
-    Tree = aec_trees:get_tree(Type, Trees),
+    %% Note that a 'db_get' callback should return the same as
+    %% aeu_mtrees:lookup/2.
+    Tree = aec_trees:get_mtree(Type, Trees),
+    {ok, DB} = aeu_mtrees:db(Tree),
     aec_db:ensure_activity(
       async_dirty, fun() ->
-                           aeu_mtrees:get(Key, Tree)
+                           aeu_mp_trees_db:get(Key, DB)
                    end).
 
-int_put(Type, Key, Value, Trees) ->
+apply_updates(Type, Hash, Updates, Trees) ->
     Tree = aec_trees:get_mtree(Type, Trees),
-    Tree1 = aec_db:ensure_activity(
-              async_dirty, fun() -> aeu_mtrees:enter(Key, Value, Tree) end),
-    {ok, aec_trees:set_mtree(Type, Tree1, Trees)}.
+    Tree1 = aeu_mp_trees:apply_proxy_updates(Hash, Updates, Tree),
+    aec_trees:set_mtree(Type, Tree1, Trees).
 
+%% int_put(Type, Key, Value, Trees) ->
+%%     Tree = aec_trees:get_mtree(Type, Trees),
+%%     Tree1 = aeu_mtrees:db_put(Key, Value, Tree),
+    
+%%     {ok, aec_trees:set_mtree(Type, Tree1, Trees)}.
      
+get_tstore() ->
+    case get(mnesia_activity_state) of
+        undefined ->
+            undefined;
+        {_, _, non_transaction} ->
+            undefined;
+        {_, _, #tidstore{store = Ets}} ->
+            check_store(Ets),
+            {ets, Ets}
+    end.
+
+check_store(Ets) ->
+    ets:tab2list(Ets).

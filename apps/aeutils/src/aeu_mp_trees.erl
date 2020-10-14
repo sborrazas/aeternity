@@ -41,6 +41,9 @@
         , dict_db_put/3
         ]).
 
+%% For receiving proxy tree updates
+-export([ apply_proxy_updates/3 ]).
+
 -export([record_fields/1]).
 
 -export_type([ tree/0
@@ -326,6 +329,14 @@ pp(#mpt{hash = Hash, db = DB}) ->
     [io:format("~s\n", [S])
      || S <- lists:flatten([pp_tree(decode_node(Hash, DB), DB)])],
     ok.
+
+apply_proxy_updates(Hash, Updates, #mpt{db = DB} = MPT) ->
+    DB1 = lists:foldl(fun apply_update/2, DB, Updates),
+    MPT#mpt{hash = Hash, db = DB1}.
+
+apply_update({Key, Value}, DB) ->
+    %% amounts to a cache update
+    aeu_mp_trees_db:put(Key, Value, DB).
 
 %%%===================================================================
 %%% Internal functions

@@ -9,6 +9,7 @@
 
 %% API
 -export([commit_to_db/1,
+         list_cache/1,
          cache_root_hash/1,
          delete_commitment/2,
          delete_name_auction/2,
@@ -230,6 +231,10 @@ commit_to_db(#ns_tree{mtree = MTree, cache = Cache} = Tree) ->
     Tree#ns_tree{mtree = aeu_mtrees:commit_to_db(MTree),
                  cache = aeu_mtrees:commit_to_db(Cache)
                 }.
+
+-spec list_cache(tree()) -> [{term(), term()}].
+list_cache(Tree) ->
+    aeu_mtrees:list_cache(Tree).
 
 -ifdef(TEST).
 -spec commitment_list(tree()) -> list(commitment()).
