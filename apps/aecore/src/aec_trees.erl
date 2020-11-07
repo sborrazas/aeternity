@@ -31,6 +31,7 @@
          set_contracts/2,
          set_ns/2,
          set_oracles/2,
+         proxy_trees/1,
          gc_cache/2,
          sum_total_coin/1
         ]).
@@ -48,6 +49,7 @@
 -export([apply_txs_on_state_trees/3,
          apply_txs_on_state_trees/4,
          apply_txs_on_state_trees_strict/3,
+         apply_one_tx/5,
          grant_fee/3,
          perform_pre_transformations/3
         ]).
@@ -107,6 +109,7 @@
                    | 'oracles'.
 
 -export_type([ trees/0
+             , tree_type/0
              , poi/0
              ]).
 
@@ -469,44 +472,36 @@ maybe_hash({error, empty}) ->
 maybe_hash({ok, Hash}) ->
     Hash.
 
-%% proxy_client(Pid, Roots) ->
-proxy_client(Pid, Roots) ->
-    #trees{ contracts = ctree(contracts, Pid, maps:get(contracts, Roots))
-          , calls     = ctree(calls    , Pid, maps:get(calls    , Roots))
-          , channels  = ctree(channels , Pid, maps:get(channels , Roots))
-          , ns        = ctree(ns       , Pid, maps:get(ns       , Roots))
-          , oracles   = ctree(oracles  , Pid, maps:get(oracles  , Roots))
-          , accounts  = ctree(accounts , Pid, maps:get(accounts , Roots))
+%% proxy_trees(ProxyTree)
+proxy_trees(PTree) ->
+    #trees{ contracts = ptree(contracts, PTree)
+          , calls     = ptree(calls    , PTree)
+          , channels  = ptree(channels , PTree)
+          , ns        = ptree(ns       , PTree)
+          , oracles   = ptree(oracles  , PTree)
+          , accounts  = ptree(accounts , PTree)
           }.
-    %% #trees{ contracts = ctree(contracts, Pid, maps:get(contracts, Roots))
-    %%       , calls     = ctree(calls, Pid, maps:get(calls, Roots))
-    %%       , channels  = ctree(channels, Pid, maps:get(channels, Roots))
-    %%       , ns        = ctree(ns, Pid, maps:get(ns, Roots))
-    %%       , oracles   = ctree(oracles, Pid, maps:get(oracles, Roots))
-    %%       , accounts  = ctree(accounts, Pid, maps:get(accounts, Roots))
+    %% #trees{ contracts = ptree(contracts, Pid, maps:get(contracts, Roots))
+    %%       , calls     = ptree(calls, Pid, maps:get(calls, Roots))
+    %%       , channels  = ptree(channels, Pid, maps:get(channels, Roots))
+    %%       , ns        = ptree(ns, Pid, maps:get(ns, Roots))
+    %%       , oracles   = ptree(oracles, Pid, maps:get(oracles, Roots))
+    %%       , accounts  = ptree(accounts, Pid, maps:get(accounts, Roots))
     %%       }.
 
-%% ctree(Tag, Pid, Root) ->
-%%     aec_trees_proxy:client_tree(Tag, Pid, Root).
-ctree(contracts = Tag, Pid, RootHash) ->
-    aect_state_tree:proxy_tree(ctree_(Tag, Pid, RootHash));
-ctree(calls = Tag, Pid, RootHash) ->
-    aect_call_state_tree:proxy_tree(ctree_(Tag, Pid, RootHash));
-ctree(channels = Tag, Pid, RootHash) ->
-    aesc_state_tree:proxy_tree(ctree_(Tag, Pid, RootHash));
-ctree(ns, Pid, {MRootHash, CacheRootHash}) ->
-    MTree = ctree_(ns, Pid, MRootHash),
-    CTree = ctree_(ns_cache, Pid, CacheRootHash),
-    aens_state_tree:proxy_tree(MTree, CTree);
-ctree(oracles, Pid, {RootHash, CRootHash}) ->
-    MTree = ctree_(oracles, Pid, RootHash),
-    CTree = ctree_(oracles_cache, Pid, CRootHash),
-    aeo_state_tree:proxy_tree(MTree, CTree);
-ctree(accounts = Tag, Pid, RootHash) ->
-    aec_accounts_trees:proxy_tree(ctree_(Tag, Pid, RootHash)).
-
-ctree_(Tag, Pid, RootHash) ->
-    aec_trees_proxy:client_tree(Tag, Pid, RootHash).
+%% ptree(Tag, ProxyTree)
+ptree(contracts, PTree) ->
+    aect_state_tree:proxy_tree(PTree);
+ptree(calls, PTree) ->
+    aect_call_state_tree:proxy_tree(PTree);
+ptree(channels, PTree) ->
+    aesc_state_tree:proxy_tree(PTree);
+ptree(ns, PTree) ->
+    aens_state_tree:proxy_tree(PTree);
+ptree(oracles, PTree) ->
+    aeo_state_tree:proxy_tree(PTree);
+ptree(accounts, PTree) ->
+    aec_accounts_trees:proxy_tree(PTree).
 
 tree_updates(Trees) ->
     lists:foldr(fun({Type, Mod}, Acc) ->
@@ -717,48 +712,34 @@ apply_txs_on_state_trees(SignedTxs, Trees, Env, Opts) ->
 
 par_apply_txs_on_state_trees(SignedTxs, Valid, Invalid, Trees, Env, Opts) ->
     Strict     = proplists:get_value(strict, Opts, false),
-    DontVerify = proplists:get_value(dont_verify_signature, Opts, false),
-    Protocol   = aetx_env:consensus_version(Env),
-    Events = aetx_env:events(Env),
-    {ok, {Proxy, MRef}} = aec_trees_proxy:start_monitor(Trees, Events),
-    Roots = root_hashes(Trees),
-    Pids = [{spawn(fun() ->
-                           CTrees = proxy_client(Proxy, Roots),
-                           apply_one_tx(SignedTx, CTrees, Env,
-                                        DontVerify, Protocol)
-                   end), SignedTx} || SignedTx <- SignedTxs],
-    aec_trees_proxy:register_clients(Proxy, [P || {P,_} <- Pids]),
+    {ok, {Proxy, MRef}} = aec_trees_proxy:start_monitor(Trees, Env, SignedTxs, Opts),
     receive
         {'DOWN', MRef, process, Proxy, Result} ->
-            check_par_apply_result(Result, Valid, Invalid, Trees, Env, Events,
-                                   SignedTxs, Strict, Pids)
+            check_par_apply_result(Result, Valid, Invalid, Trees, Env,
+                                   SignedTxs, Strict)
     end.
 
-check_par_apply_result(Result, Valid, Invalid, Trees, Env, Events,
-                       SignedTxs, Strict, Pids) ->
+check_par_apply_result(Result, Valid, Invalid, Trees, Env,
+                       SignedTxs, Strict) ->
     case Result of
-        {ok, {ValidPids, InvalidPids, Trees1, Events1}} ->
-            ValidTxs = fetch_txs(ValidPids, Pids),
-            InvalidTxs = fetch_txs(InvalidPids, Pids),
+        {ok, {Valid1, Invalid1, Trees1, Events1}} ->
+            ValidTxs = fetch_txs(Valid1, SignedTxs),
+            InvalidTxs = fetch_txs(Invalid1, SignedTxs),
             {ok, Valid ++ ValidTxs, Invalid ++ InvalidTxs, Trees1, Events1};
         {error, _Reason} = Error ->
             Error;
         _Other ->
-            %% to be safe
-            [exit(P, kill) || {P, _} <- Pids],
             if Strict ->
                     {error, internal_error};
                true ->
+                    Events = aetx_env:events(Env),
                     {ok, _ValidTxs = [], _InvalidTxs = SignedTxs,
                      Trees, Events}
             end
     end.
 
-fetch_txs(Pids, PidsAndTxs) ->
-    lists:map(fun(Pid) ->
-                      {_, SignedTx} = lists:keyfind(Pid, 1, PidsAndTxs),
-                      SignedTx
-              end, Pids).
+fetch_txs(all, SignedTxs) -> SignedTxs;
+fetch_txs(L, _SignedTxs)  -> L.
 
 apply_txs_on_state_trees_strict(SignedTxs, Trees, Env) ->
     apply_txs_on_state_trees(SignedTxs, [], [], Trees, Env, [strict, tx_events]).
@@ -786,7 +767,7 @@ apply_txs_on_state_trees_([SignedTx | Rest], ValidTxs, InvalidTxs, Trees, Env, O
     Strict     = proplists:get_value(strict, Opts, false),
     DontVerify = proplists:get_value(dont_verify_signature, Opts, false),
     Protocol   = aetx_env:consensus_version(Env),
-    try one_tx(SignedTx, Trees, Env, DontVerify, Protocol) of
+    try apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol) of
         {ok, Trees1, Env20} ->
             Env21 = aetx_env:update_env(Env20, Env),
             Valid1 = [SignedTx | ValidTxs],
@@ -813,19 +794,11 @@ apply_txs_on_state_trees_([SignedTx | Rest], ValidTxs, InvalidTxs, Trees, Env, O
 tx(SignedTx) ->
     aetx_sign:tx(SignedTx).
 
-apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol) ->
-    try one_tx(SignedTx, Trees, Env, DontVerify, Protocol) of
-        {ok, Trees1, Env1} ->
-            exit({ok, tree_updates(Trees1), aetx_env:events(Env1)});
-        {error, _}  = Err ->
-            exit(Err)
-    catch
-        Type:What:ST ->
-            lager:debug("CAUGHT ~p:~p / ~p", [Type, What, ST]),
-            exit({Type, What})
-    end.
+apply_one_tx(SignedTx, Trees, Env, DontVerify) ->
+    Protocol = aetx_env:consensus_version(Env),
+    apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol).
 
-one_tx(SignedTx, Trees, Env, DontVerify, Protocol) ->
+apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol) ->
     case verify_signature(SignedTx, Trees, Protocol, DontVerify) of
         ok ->
             Env1 = aetx_env:set_signed_tx(Env, {value, SignedTx}),

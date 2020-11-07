@@ -62,6 +62,18 @@
 
 -define(VSN, 1).
 
+-record(proxy, {mod, arg}).
+
+-define(PROXY(F, Mod, P),
+        F(#proxy{mod = Mod} = P) -> Mod:do(?MODULE, F, P)).
+                
+-define(PROXY(F, Arg1, Mod, P),
+        F(Arg1, #proxy{mod = Mod} = P) -> Mod:do(?MODULE, F, Arg1, P)).
+
+-define(PROXY(F, Arg1, Arg2, Mod, P),
+        F(Arg1, Arg2, #proxy{mod = Mod} = P) -> Mod:do(?MODULE, F, Arg1, Arg2, P)).
+
+
 %% ==================================================================
 %% Tracing support
 record_fields(contract_tree) -> record_info(fields, contract_tree);
@@ -92,10 +104,12 @@ proxy_tree(Tree) ->
     #contract_tree{contracts = Tree}.
 
 -spec get(aec_keys:pubkey(), tree()) -> binary().
+?PROXY(get, Key, Mod, Arg);
 get(Key, #contract_tree{contracts = CtTree}) ->
     aeu_mtrees:get(Key, CtTree).
 
 -spec gc_cache(tree()) -> tree().
+?PROXY(gc_cache, Mod, Arg);
 gc_cache(#contract_tree{contracts = CtTree} = Tree) ->
     Tree#contract_tree{contracts =  aeu_mtrees:gc_cache(CtTree)}.
 
@@ -106,6 +120,7 @@ list_cache(#contract_tree{contracts = CtTree}) ->
 %% -- Contracts --
 
 -spec insert_contract(aect_contracts:contract(), tree()) -> tree().
+?PROXY(insert_contract, Contract, Mod, Arg);
 insert_contract(Contract, Tree = #contract_tree{ contracts = CtTree }) ->
     Pubkey     = aect_contracts:pubkey(Contract),
     Serialized = aect_contracts:serialize(Contract),
@@ -115,6 +130,7 @@ insert_contract(Contract, Tree = #contract_tree{ contracts = CtTree }) ->
 
 -spec copy_contract_store(aect_contracts:contract(),
                           aect_contracts:pubkey(), tree()) -> tree().
+?PROXY(copy_contract_store, Contract, NewId, Mod, P);
 copy_contract_store(Contract, NewId, Tree = #contract_tree{ contracts = CtTree }) ->
     Id    = aect_contracts:compute_contract_store_id(NewId),
     Store = aect_contracts:state(Contract),
