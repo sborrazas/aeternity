@@ -39,6 +39,7 @@
             , proxy_trees   :: aec_trees:trees()
             , dontverify    :: boolean()
             , ctrees        :: #{ index() => aec_trees:trees() }
+            , done          :: #{ index() => any() }
             , deps    = #{} :: #{ aeser_id:id() => [index()] }
             , claims  = #{} :: #{ index() => [aeser_id:id()] }
             , clients = []  :: #{ pid() => {index(), first_access()}, index() => pid() }
@@ -265,7 +266,6 @@ id_to_type(Id) ->
         contract   -> contracts;
         channel    -> channels
     end.
-             
 
 apply_one_tx(SignedTx, Trees, Env, DontVerify) ->
     try aec_trees:apply_one_tx(SignedTx, Trees, Env, DontVerify) of
@@ -297,7 +297,7 @@ serve_pending(#st{ clients = [Pid | _]
     end.
 
 handle_req({aeu_mtrees, get, F, Type, Args} = Req, {Pid,Ref}, #st{deps = Deps} = St) ->
-    case check_deps(Type, Key, Pid, St) of
+    case check_deps(Type, get, Key, Pid, St) of
         {reply, _, _} = Reply ->
             Reply;
         {ok, St1} ->
@@ -356,47 +356,71 @@ check_deps_ids([Id|Ids], Pid, St) ->
     case check_deps(Id, St) of
         {ok, St1} ->
             check_deps_ids(Ids, St1);
-        {wait, _} = Wait ->
-            Wait;
-        {restart, _} = Restart ->
-            Restart;
-        {error, _} = Error ->
-            Error
+        {wait   , _} = Wait    -> Wait;
+        {restart, _} = Restart -> Restart;
+        {error  , _} = Error   -> Error
     end.
 
 check_deps(Id, Pid, #st{ clients = Cs
-                       , claims  = Claims } = S) ->
+                       , claims  = Claims
+                       , done    = Done } = S) ->
     case maps:find(Pid, Cs) of
         {ok, {Ix, FirstAccess}} ->
             Id = {Type, Key},
-            case maps:find(Id, Claims) of
-                {ok, [Ix|_]} ->
-                    %% Worker is at the head of the queue. Go!
-                    %% This can happen when we have a 'pre-claim' (i.e. the entity
-                    %% was apparent from the tx)
-                    {ok, S#st{ clients = Cs#{Pid => {Ix, false}}}};
-                {ok, [HdIx|Tl] = Refs} when HdIx < Ix ->
-                    %% We must wait. If we have already accessed trees, there is a potential
-                    %% for inconsistency, so we restart
-                    S1 = S#st{clients = Cs#{Pid => {Ix, false}}},
-                    case FirstAccess of
-                        true ->
-                            case ordsets:is_element(Ix, Tl) of
-                                false ->
-                                    Refs1 = ordsets:add_element(Ix, Refs),
-                                    {wait, S#st{claims = Claims#{Id => Refs1}}};
-                                true ->
-                                    {wait, S1}
-                            end;
-                        false ->
-                            %% We have identified a dependency, but have already started
-                            %% accessing the state trees. 
-                            {noreply, restart_worker(Ix, Pid, S)}
-                    end
-            end;
+            {Action, Claims1} check_claim(Id, Ix, FirstAccess, Claims, Done),
+            {Action, S#st{ claims = Claims1
+                         , clients = Cs#{Pid => {Ix, false}}}};
+            %%     {wait,  Claims1} ->
+            %%         S1 = S#st{ clients = Cs#{Pid => {Ix, false}}
+            %%                  , claims = Claims1 },
+            %%         {wait, S1};
+
+            %%                 %% We have identified a dependency, but have already started
+            %%                 %% accessing the state trees.
+            %%                 {noreply, restart_worker(Ix, Pid, S)}
+            %%         end
+            %% end;
         error ->
             {error, unknown_pid}
     end.
+
+check_claim(Id, Ix, FirstAccess, Claims, Done) ->
+    case maps:find(Id, Claims) of
+        {ok, IdClaims} ->
+            IdClaims1 = prune_claims(IdClaims, Ix, Done),
+            case IdClaims1 of
+                [Ix|_] ->
+                    {ok, Claims#{Id => IdClaims1}};
+                [HdIx|Tl] when HdIx < Ix ->
+                    {wait_or_restart(FirstAccess, Ix Tl),
+                     Claims#{Id => IdClaims1}};
+                Other ->
+                    %% [], or [HdIx|_] when HdIx > Ix
+                    {ok, Claims#{Id => [Ix|Other]}}
+            end;
+        error ->
+            {ok, Claims#{Id => [Ix]}}
+    end.
+
+wait_or_restart(true, _, _) ->
+    wait;
+wait_or_restart(false, Ix, List) ->
+    case lists:member(Ix, List) of
+        true ->
+            restart;
+        false ->
+            wait
+    end.
+
+prune_claims([H|T] =  Claims, Ix, Done) when H < Ix ->
+    case maps:is_key(H, Done) of
+        true ->
+            prune_claims(T, Ix, Done);
+        false ->
+            Claims
+    end;
+prune_claims(Claims, _, _) ->
+    Claims.
 
 int_get(Type, Key, Trees) ->
     %% Note that a 'db_get' callback should return the same as
@@ -416,9 +440,9 @@ apply_updates(Type, Hash, Updates, Trees) ->
 %% int_put(Type, Key, Value, Trees) ->
 %%     Tree = aec_trees:get_mtree(Type, Trees),
 %%     Tree1 = aeu_mtrees:db_put(Key, Value, Tree),
-    
+
 %%     {ok, aec_trees:set_mtree(Type, Tree1, Trees)}.
-     
+
 get_tstore() ->
     case get(mnesia_activity_state) of
         undefined ->
