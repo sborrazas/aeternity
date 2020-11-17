@@ -25,6 +25,7 @@
          set_tree/3,
          get_mtree/2,
          set_mtree/3,
+         types/0,
          set_accounts/2,
          set_calls/2,
          set_channels/2,
@@ -73,12 +74,12 @@
         ]).
 -endif.
 
--type tree() :: aec_accounts_trees:tree()
-              | aec_call_state_tree:tree()
-              | aesc_state_tree:tree()
-              | aect_state_tree:tree()
-              | aens_state_tree:tree()
-              | aeo_state_tree:tree().
+%% -type tree() :: aec_accounts_trees:tree()
+%%               | aec_call_state_tree:tree()
+%%               | aesc_state_tree:tree()
+%%               | aect_state_tree:tree()
+%%               | aens_state_tree:tree()
+%%               | aeo_state_tree:tree().
 
 -record(trees, {
           accounts  :: aec_accounts_trees:tree(),
@@ -108,8 +109,21 @@
                    | 'ns'
                    | 'oracles'.
 
+-type subtree_type() :: tree_type() | ns_cache | oracles_cache.
+
+-type signed_txs()  :: [aetx_sign:signed_tx()].
+-type valid_txs()   :: signed_txs().
+-type invalid_txs() :: signed_txs().
+-type opts()        :: proplists:proplist().
+-type env()         :: aetx_env:env().
+-type events()      :: aetx_env:events().
+
+-type apply_result() :: {ok, valid_txs(), invalid_txs(), trees(), events()}
+                      | {error, term()}.
+
 -export_type([ trees/0
              , tree_type/0
+             , subtree_type/0
              , poi/0
              ]).
 
@@ -449,37 +463,38 @@ sum_auctions({AuctionHash, SerAuction, Iter}, Acc) ->
     Acc1 = Acc + aens_auctions:name_fee(Auction),
     sum_auctions(aens_state_tree:auction_iterator_next(Iter), Acc1).
 
-root_hashes(Trees) ->
-    lists:foldl(
-      fun({Type, Mod}, Acc) ->
-              Acc#{Type => root_hash(Mod, get_tree(Type, Trees))}
-      end, #{}, types()).
+%% root_hashes(Trees) ->
+%%     lists:foldl(
+%%       fun({Type, Mod}, Acc) ->
+%%               Acc#{Type => root_hash(Mod, get_tree(Type, Trees))}
+%%       end, #{}, types()).
 
--type maybe_hash() :: empty | binary().
+%% -type maybe_hash() :: empty | binary().
 
--spec root_hash(tree_type(), tree()) -> maybe_hash() | {maybe_hash(), maybe_hash()}.
-root_hash(aens_state_tree, Tree) ->
-    {maybe_hash(aens_state_tree:root_hash(Tree)),
-     maybe_hash(aens_state_tree:cache_root_hash(Tree))};
-root_hash(aeo_state_tree, Tree) ->
-    {maybe_hash(aeo_state_tree:root_hash(Tree)),
-     maybe_hash(aeo_state_tree:cache_root_hash(Tree))};
-root_hash(Mod, Tree) ->
-    maybe_hash(Mod:root_hash(Tree)).
+%% -spec root_hash(tree_type(), tree()) -> maybe_hash() | {maybe_hash(), maybe_hash()}.
+%% root_hash(aens_state_tree, Tree) ->
+%%     {maybe_hash(aens_state_tree:root_hash(Tree)),
+%%      maybe_hash(aens_state_tree:cache_root_hash(Tree))};
+%% root_hash(aeo_state_tree, Tree) ->
+%%     {maybe_hash(aeo_state_tree:root_hash(Tree)),
+%%      maybe_hash(aeo_state_tree:cache_root_hash(Tree))};
+%% root_hash(Mod, Tree) ->
+%%     maybe_hash(Mod:root_hash(Tree)).
 
-maybe_hash({error, empty}) ->
-    empty;
-maybe_hash({ok, Hash}) ->
-    Hash.
+%% maybe_hash({error, empty}) ->
+%%     empty;
+%% maybe_hash({ok, Hash}) ->
+%%     Hash.
 
-%% proxy_trees(ProxyTree)
-proxy_trees(PTree) ->
-    #trees{ contracts = ptree(contracts, PTree)
-          , calls     = ptree(calls    , PTree)
-          , channels  = ptree(channels , PTree)
-          , ns        = ptree(ns       , PTree)
-          , oracles   = ptree(oracles  , PTree)
-          , accounts  = ptree(accounts , PTree)
+%% proxy_trees(ArgInitF)
+-spec proxy_trees(fun( (subtree_type()) -> aeu_mtrees:mtree() )) -> trees().
+proxy_trees(TreeF) when is_function(TreeF, 1) ->
+    #trees{ contracts = ptree(contracts, TreeF)
+          , calls     = ptree(calls    , TreeF)
+          , channels  = ptree(channels , TreeF)
+          , ns        = ptree(ns       , TreeF)
+          , oracles   = ptree(oracles  , TreeF)
+          , accounts  = ptree(accounts , TreeF)
           }.
     %% #trees{ contracts = ptree(contracts, Pid, maps:get(contracts, Roots))
     %%       , calls     = ptree(calls, Pid, maps:get(calls, Roots))
@@ -490,24 +505,28 @@ proxy_trees(PTree) ->
     %%       }.
 
 %% ptree(Tag, ProxyTree)
-ptree(contracts, PTree) ->
-    aect_state_tree:proxy_tree(PTree);
-ptree(calls, PTree) ->
-    aect_call_state_tree:proxy_tree(PTree);
-ptree(channels, PTree) ->
-    aesc_state_tree:proxy_tree(PTree);
-ptree(ns, PTree) ->
-    aens_state_tree:proxy_tree(PTree);
-ptree(oracles, PTree) ->
-    aeo_state_tree:proxy_tree(PTree);
-ptree(accounts, PTree) ->
-    aec_accounts_trees:proxy_tree(PTree).
+ptree(contracts, TreeF) ->
+    aect_state_tree:proxy_tree(TreeF(contracts));
+ptree(calls, TreeF) ->
+    aect_call_state_tree:proxy_tree(TreeF(calls));
+ptree(channels, TreeF) ->
+    aesc_state_tree:proxy_tree(TreeF(channels));
+ptree(ns, TreeF) ->
+    MTree = TreeF(ns),
+    CTree = TreeF(ns_cache),
+    aens_state_tree:proxy_tree(MTree, CTree);
+ptree(oracles, TreeF) ->
+    OTree = TreeF(oracles),
+    CTree = TreeF(oracles_cache),
+    aeo_state_tree:proxy_tree(OTree, CTree);
+ptree(accounts, TreeF) ->
+    aec_accounts_trees:proxy_tree(TreeF(accounts)).
 
-tree_updates(Trees) ->
-    lists:foldr(fun({Type, Mod}, Acc) ->
-                        Updates = do_list_updates(Type, Mod, Trees),
-                        [{Type, Updates} | Acc]
-                end, [], types()).
+%% tree_updates(Trees) ->
+%%     lists:foldr(fun({Type, Mod}, Acc) ->
+%%                         Updates = do_list_updates(Type, Mod, Trees),
+%%                         [{Type, Updates} | Acc]
+%%                 end, [], types()).
 
 types() ->
     [ {contracts, aect_state_tree}
@@ -517,14 +536,14 @@ types() ->
     , {oracles, aeo_state_tree}
     , {accounts, aec_accounts_trees}].
 
-do_list_updates(Type, Mod, Trees) ->
-    MTree = get_mtree(Type, Trees),
-    case aeu_mtrees:root_hash(MTree) of
-        {error, empty} ->
-            {<<>>, []};
-        {ok, RootHash} ->
-            {RootHash, Mod:list_cache(MTree)}
-    end.
+%% do_list_updates(Type, Mod, Trees) ->
+%%     MTree = get_mtree(Type, Trees),
+%%     case aeu_mtrees:root_hash(MTree) of
+%%         {error, empty} ->
+%%             {<<>>, []};
+%%         {ok, RootHash} ->
+%%             {RootHash, Mod:list_cache(MTree)}
+%%     end.
 
 %%%=============================================================================
 %%% Serialization for db storage
@@ -704,19 +723,30 @@ internal_commit_to_db(Trees) ->
                , accounts  = aec_accounts_trees:commit_to_db(accounts(Trees))
                }.
 
+-spec apply_txs_on_state_trees(signed_txs(), trees(), env()) -> apply_result().
 apply_txs_on_state_trees(SignedTxs, Trees, Env) ->
     apply_txs_on_state_trees(SignedTxs, [], [], Trees, Env, []).
 
+-spec apply_txs_on_state_trees(signed_txs(), trees(), env(), opts()) -> apply_result().
 apply_txs_on_state_trees(SignedTxs, Trees, Env, Opts) ->
     apply_txs_on_state_trees(SignedTxs, [], [], Trees, Env, Opts).
 
+-spec par_apply_txs_on_state_trees(signed_txs(), valid_txs(), invalid_txs(),
+                                   trees(), env(), opts()) -> apply_result().
 par_apply_txs_on_state_trees(SignedTxs, Valid, Invalid, Trees, Env, Opts) ->
-    Strict     = proplists:get_value(strict, Opts, false),
-    {ok, {Proxy, MRef}} = aec_trees_proxy:start_monitor(Trees, Env, SignedTxs, Opts),
-    receive
-        {'DOWN', MRef, process, Proxy, Result} ->
-            check_par_apply_result(Result, Valid, Invalid, Trees, Env,
-                                   SignedTxs, Strict)
+    ParMaxDeps = proplists:get_value(par_max_deps_ratio, Opts, 0.7),
+    case aec_trees_proxy:prepare_for_par_eval(SignedTxs) of
+        #{tx_count := TxC, max_dep_count := DepC} when DepC / TxC > ParMaxDeps ->
+            lager:debug("Too many deps (~p/~p); falling back to serial", [DepC, TxC]),
+            apply_txs_on_state_trees_(SignedTxs, Valid, Invalid, Trees, Env, Opts);
+        Context ->
+            Strict     = proplists:get_value(strict, Opts, false),
+            {ok, {Proxy, MRef}} = aec_trees_proxy:start_monitor(Trees, Env, Context, Opts),
+            receive
+                {'DOWN', MRef, process, Proxy, Result} ->
+                    check_par_apply_result(Result, Valid, Invalid, Trees, Env,
+                                           SignedTxs, Strict)
+            end
     end.
 
 check_par_apply_result(Result, Valid, Invalid, Trees, Env,
@@ -794,9 +824,9 @@ apply_txs_on_state_trees_([SignedTx | Rest], ValidTxs, InvalidTxs, Trees, Env, O
 tx(SignedTx) ->
     aetx_sign:tx(SignedTx).
 
-apply_one_tx(SignedTx, Trees, Env, DontVerify) ->
-    Protocol = aetx_env:consensus_version(Env),
-    apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol).
+%% apply_one_tx(SignedTx, Trees, Env, DontVerify) ->
+%%     Protocol = aetx_env:consensus_version(Env),
+%%     apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol).
 
 apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol) ->
     case verify_signature(SignedTx, Trees, Protocol, DontVerify) of

@@ -9,7 +9,6 @@
 
 %% API
 -export([commit_to_db/1,
-         list_cache/1,
          cache_root_hash/1,
          delete_commitment/2,
          delete_name_auction/2,
@@ -112,15 +111,15 @@ new_with_backend(RootHash, CacheRootHash) ->
     Cache = aeu_mtrees:new_with_backend(CacheRootHash, aec_db_backends:ns_cache_backend()),
     #ns_tree{mtree = MTree, cache = Cache}.
 
--spec proxy_tree(aeu_mtrees:tree(), aeu_mtrees:tree()) -> tree().
+-spec proxy_tree(aeu_mtrees:mtree(), aeu_mtrees:mtree()) -> tree().
 proxy_tree(MTree, CacheTree) ->
     #ns_tree{mtree = MTree, cache = CacheTree}.
 
--spec get_mtree(tree()) -> aeu_mtrees:tree().
+-spec get_mtree(tree()) -> aeu_mtrees:mtree().
 get_mtree(#ns_tree{mtree = MTree}) ->
     MTree.
 
--spec set_mtree(aeu_mtrees:tree(), tree()) -> tree().
+-spec set_mtree(aeu_mtrees:mtree(), tree()) -> tree().
 set_mtree(MTree, #ns_tree{} = T) ->
     T#ns_tree{mtree = MTree}.
 
@@ -231,10 +230,6 @@ commit_to_db(#ns_tree{mtree = MTree, cache = Cache} = Tree) ->
     Tree#ns_tree{mtree = aeu_mtrees:commit_to_db(MTree),
                  cache = aeu_mtrees:commit_to_db(Cache)
                 }.
-
--spec list_cache(tree()) -> [{term(), term()}].
-list_cache(Tree) ->
-    aeu_mtrees:list_cache(Tree).
 
 -ifdef(TEST).
 -spec commitment_list(tree()) -> list(commitment()).

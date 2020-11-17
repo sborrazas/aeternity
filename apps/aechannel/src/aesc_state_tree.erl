@@ -14,7 +14,6 @@
          enter/2,
          get/2,
          lookup/2,
-         list_cache/1,
          mtree_iterator/1,
          new_with_backend/1,
          proxy_tree/1,
@@ -119,7 +118,3 @@ serialization_template(?VSN) ->
 -spec mtree_iterator(tree()) -> aeu_mtrees:iterator().
 mtree_iterator(Tree) ->
     aeu_mtrees:iterator(Tree).
-
--spec list_cache(tree()) -> [{term(), term()}].
-list_cache(Tree) ->
-    aeu_mtrees:list_cache(Tree).

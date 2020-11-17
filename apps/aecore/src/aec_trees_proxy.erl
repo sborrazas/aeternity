@@ -1,14 +1,10 @@
 -module(aec_trees_proxy).
 
--export([ start_monitor/4 ]).
+-export([ prepare_for_par_eval/1
+        , start_monitor/4 ]).
         %% , register_clients/2 ]).
 
 %% -export([ client_tree/3 ]).
-
-%% -export([ proxy_get/2
-%%         , proxy_put/3
-%%         , proxy_drop_cache/1
-%%         , proxy_list_cache/1]).
 
 -export([ proxy_init/1
         , proxy_get/4
@@ -22,182 +18,115 @@
         , terminate/2
         , code_change/3 ]).
 
--type type() :: channels | calls | accounts | contracts | ns.
--type key() :: term().
--type value() :: term().
+%% -dialyzer([{nowarn_function, spawn_monitor_worker/5}]).
 
--type req() :: {?MODULE, get, type(), term()}
-             | {?MODULE, put, type(), key(), value()}.
+%% -type tree_type() :: aec_trees:tree_type().
+-type subtree_type() :: aec_trees:subtree_type().
 
--type pend() :: {pid(), {pid(), term()}, req()}.
+-record(req, { op   :: get | put
+             , mod  :: module()
+             , type :: subtree_type() | undefined
+             , f    :: atom()
+             , args :: tuple()
+             , from :: {pid(), reference()} | undefined
+             }).
 
+-type req() :: #req{}.
+
+-type signed_tx() :: aetx_sign:signed_tx().
 -type index() :: non_neg_integer().
--type first_access() :: boolean().
+-type id_key() :: {subtree_type(), aeser_id:id()}.
+-type indexed_txs() :: [{index(), signed_tx()}].
+-type deps_map() :: #{ id_key() => gb_sets:set(index()) }.
+-type claims_map() :: #{ id_key() => gb_sets:set(index()) }.
 
--record(st, { trees         :: undefined | aec_trees:trees()
-            , env           :: aex_env:env()
+-type trees()    :: aec_trees:trees().
+-type env()      :: aetx_env:env().
+-type proplist() :: proplists:proplist().
+-type protocol() :: non_neg_integer().
+
+-type context() :: #{ indexed       := indexed_txs()
+                    , tx_count      := non_neg_integer()
+                    , max_dep_count := non_neg_integer()
+                    , deps          := deps_map()
+                    , claims        := claims_map() }.
+
+-record(st, { trees         :: trees()
+            , env           :: aetx_env:env()
             , proxy_trees   :: aec_trees:trees()
             , dontverify    :: boolean()
-            , ctrees        :: #{ index() => aec_trees:trees() }
-            , done          :: #{ index() => any() }
-            , deps    = #{} :: #{ aeser_id:id() => [index()] }
-            , claims  = #{} :: #{ index() => [aeser_id:id()] }
-            , clients = []  :: #{ pid() => {index(), first_access()}, index() => pid() }
-            , pending = []  :: #{ index() => [index()] }
-            , valid   = []  :: [pid()]
-            , invalid = []  :: [pid()]
+            %% , ctrees        :: #{ index() => aec_trees:trees() }
+            , status  = #{} :: #{ index() => done | ongoing }
+            , deps    = #{} :: deps_map()
+            , claims  = #{} :: claims_map()
+            , clients = #{} :: #{ index() => {pid(), reference(), signed_tx()} }
+            , pids    = #{} :: #{ pid() => index() }
+            , pending = gb_trees:empty()  :: gb_trees:tree(index(), req())
+            , valid   = []  :: [signed_tx()]
+            , invalid = []  :: [signed_tx()]
             , events  = []  :: aetx_env:events() }).
 
 -record(pstate, { cache :: term()
-                , type  :: aec_trees:tree_type()
+                , type  :: subtree_type()
                 , pid   :: pid() }).
 
 -include_lib("aeutils/include/aeu_proxy.hrl").
 -include_lib("mnesia/src/mnesia.hrl").
 
--type trees()    :: aec_trees:trees().
--type env()      :: aetx_env:env().
--type proplist() :: proplists:proplist().
-
--spec start_monitor(trees(), env(), [aetx_sign:tx()], proplist()) ->
+-spec start_monitor(aec_trees:trees(), aetx_env:env(), context(), proplist()) ->
           {ok, {pid(), reference()}}.
 -if(?OTP_RELEASE >= 23).
-start_monitor(Trees, Env, SignedTxs, Opts) ->
-    gen_server:start_monitor(?MODULE, {Trees, Env, SignedTxs}, []).
+start_monitor(Trees, Env, #{indexed := _} = Ctxt, Opts) ->
+    gen_server:start_monitor(?MODULE, {Trees, Env, Ctxt}, []).
 -else.
-start_monitor(Trees, Env, SignedTxs, Opts) ->
+start_monitor(Trees, Env, #{indexed := _} = Ctxt, Opts) ->
     _TStore = get_tstore(),
-    {ok, Pid} = gen_server:start(?MODULE, {Trees, Env, SignedTxs, Opts}, []),
+    lager:debug("_TStore = ~p", [_TStore]),
+    {ok, Pid} = gen_server:start(?MODULE, {Trees, Env, Ctxt, Opts}, []),
     MRef = monitor(process, Pid),
     {ok, {Pid, MRef}}.
 -endif.
-
-%% register_clients(Proxy, Clients) ->
-%%     gen_server:cast(Proxy, {clients, Clients}).
-
-%% -spec client_tree(type(), pid(), empty | {binary(), binary()}) -> aeu_mtrees:mtree().
-%% client_tree(Type, Pid, empty) ->
-%%     %% aeu_mtrees:proxy_tree(?MODULE, {Type, Pid, empty});
-%%     aeu_mtrees:new_with_backend(
-%%       empty,
-%%       aeu_mp_trees_db:new(db_spec(Type, Pid)));
-%% client_tree(Type, Pid, RootHash) ->
-%%     %% aeu_mtrees:proxy_tree(?MODULE, {Type, Pid, RootHash}).
-%%     aeu_mtrees:new_with_backend(
-%%       {proxy, RootHash},
-%%       aeu_mp_trees_db:new(db_spec(Type, Pid))).
-
-%% db_spec(Type, Pid) ->
-%%     Cache = new_cache(),
-%%     #{ handle => {Type, Pid, Cache}
-%%      , cache  => Cache
-%%      , get    => {?MODULE, proxy_get}
-%%      , put    => {?MODULE, proxy_put}
-%%      , drop_cache => {?MODULE, proxy_drop_cache}
-%%      , list_cache => {?MODULE, proxy_list_cache}
-%%      }.
-
--define(CACHE(C), {ets, _} = C).
-
-proxy_put(Key, Value, ?CACHE(Cache)) ->
-    cache_insert(Cache, {Key, write, {value, Value}}),
-    Cache;
-proxy_put(_Key, _Value, {_Type, _P, ?CACHE(_Cache)}) ->
-    %% needed?
-    error(nyi).
-
-proxy_get(Key, ?CACHE(Cache)) ->
-    case cache_lookup(Cache, Key) of
-        [{_, _, Res}] ->
-            Res;
-        [] ->
-            none
-    end;
-proxy_get(Key, {Type, P, ?CACHE(Cache)}) ->
-    Res = gen_server:call(P, {?MODULE, get, Type, Key}),
-    cache_insert(Cache, {Key, read, Res}),
-    Res.
-
-proxy_drop_cache(?CACHE(Cache)) ->
-    cache_clear(Cache),
-    Cache.
-
-proxy_list_cache(?CACHE(Cache)) ->
-    {ets, Tab} = Cache,
-    ets:select(Tab, [ {{'$1', write, {value, '$2'}}, [], [{{'$1', '$2'}}]} ]).
-
-new_cache() ->
-    {ets, ets:new(proxy_cache, [ordered_set])}.
-
-cache_insert({ets, Tab}, Obj) ->
-    ets:insert(Tab, Obj).
-
-cache_lookup({ets, Tab}, Key) ->
-    ets:lookup(Tab, Key).
-
-cache_clear({ets, Tab}) ->
-    ets:delete_all_objects(Tab).
 
 %% ======================================================================
 %% Gen_server side
 %% ======================================================================
 
-init({Trees, Env, SignedTxs, Opts}) ->
-    ProxyTrees = aec_trees:proxy_trees(self()),
+-spec init({trees(), env(), context(), proplist()}) -> {ok, #st{}}.
+init({Trees, Env, #{ indexed := Indexed
+                   , deps    := Deps
+                   , claims  := Claims }, Opts}) ->
+    ArgF = fun(Type) ->
+                   aeu_mtrees:proxy_tree(?MODULE, #{ type => Type
+                                                   , pid  => self() })
+           end,
+    ProxyTrees = aec_trees:proxy_trees(ArgF),
     DontVerify = proplists:get_value(dont_verify_signature, Opts, false),
     Events = aetx_env:events(Env),
-    S0 = #st{ clients     = []
+    S0 = #st{ clients     = #{}
+            , deps        = Deps
+            , claims      = Claims
             , proxy_trees = ProxyTrees
             , dontverify  = DontVerify
             , env         = Env
             , trees       = Trees
             , events      = Events },
-    S = start_workers(SignedTxs, Env, ProxyTrees, DontVerify, S0),
-    {ok, S#st{ clients = []
-            , trees   = Trees
-            , events  = Events }}.
+    {ok, start_workers(Indexed, ProxyTrees, Env, DontVerify, S0)}.
 
-handle_call({?MODULE, Req}, {Pid, _}, #st{} = St) ->
-    handle_req(Req, Pid, St);
-handle_call(Req, {Pid,_} = From, #st{ pending = Pend } = St) ->
-    {noreply, St#st{ pending = [{Pid, From, Req}|Pend] }}.
+handle_call({?MODULE, #req{} = Req}, {Pid, _} = From, #st{} = St) ->
+    handle_req(Req#req{from = From}, Pid, St).
 
-handle_cast({clients, Clients}, St) ->
-    [monitor(process, Pid) || Pid <- Clients],
-    {noreply, serve_pending(St#st{ clients = Clients })};
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info({'DOWN', _MRef, process, Pid, Reason}, #st{ clients = [Pid | Cs]
-                                                      , trees   = Trees
-                                                      , events  = Events } = St) ->
-    %% Current leader client is done
-    {IsValid, Trees1, Events1} =
-        case Reason of
-            {ok, Updates, NewEvents} ->
-                {true,
-                 lists:foldl(
-                   fun({Type, {Hash, Values}}, Ts) ->
-                           apply_updates(Type, Hash, Values, Ts)
-                   end, Trees, Updates),
-                 Events ++ NewEvents};
-            _ ->
-                {false, Trees, Events}
-        end,
-    St1 = log_valid(IsValid, Pid, St),
-    case Cs of
-        [] ->
-            #st{valid = Valid, invalid = Invalid} = St1,
-            {stop, {ok, {Valid, Invalid, Trees1, Events1}}, St};
-        _ ->
-            {noreply, serve_pending(St#st{ clients = Cs
-                                         , trees = Trees1
-                                         , events = Events1 })}
+handle_info({'DOWN', _MRef, process, Pid, Reason}, #st{ clients = Cs } = St) ->
+    case maps:find(Pid, Cs) of
+        {ok, Ix} ->
+            lager:debug("DOWN (~p) -> tx ~p", [Pid, Ix]),
+            tx_down(Ix, Reason, St#st{clients = maps:remove(Pid, Cs)});
+        error ->
+            lager:debug("Ignoring DOWN from ~p", [Pid]),
+            {noreply, St}
     end;
-handle_info({'DOWN', _MRef, process, Pid, _}, #st{ clients = Cs
-                                                 , pending = Pend } = St) ->
-    {noreply, St#st{ clients = Cs -- [Pid]
-                   , pending = lists:keydelete(Pid, 1, Pend) }};
 handle_info(_, St) ->
     {noreply, St}.
 
@@ -207,51 +136,106 @@ terminate(_Reason, _St) ->
 code_change(_FromVsn, St, _Extra) ->
     {ok, St}.
 
-start_workers(SignedTxs, Env, ProxyTrees, DontVerify, S0) ->
-    {L, S} = lists:mapfoldl(
-               fun(SignedTx, {N, Sx}) ->
-                       { {N, SignedTx},
-                         {N+1, log_initial_deps(SignedTx, N, Sx)} }
-               end, {1, S0}, SignedTxs),
-    PidMap = lists:foldl(
-               fun({N, STx}, M) ->
-                       start_worker(N, STx, ProxyTrees, Env, DontVerify, M)
-               end, #{}, L),
-    S#st{clients = PidMap}.
+tx_down(Ix, Reason, #st{ status = Status
+                       , events = Events0 } = St) ->
+    %% All valid txs must have at least some claims.
+    {IsValid, Events} =
+        case Reason of
+            {ok, NewEvents} ->
+                {true, Events0 ++ NewEvents};
+            _ ->
+                {false, Events0}
+        end,
+    St1 = log_valid(IsValid, Ix, St#st{ status = Status#{Ix => done}
+                                      , events = Events }),
+    {noreply, serve_pending(St1)}.
 
-start_worker(N, SignedTx, Trees, Env, DontVerify, PidMap) ->
+-spec start_workers(indexed_txs(), aec_trees:trees(), aetx_env:env(), boolean(), #st{}) -> #st{}.
+start_workers(IndexedTxs, ProxyTrees, Env, DontVerify, S) ->
+    Protocol = get_protocol(Env),
+    {Clients, Pids} =
+        lists:foldl(
+          fun({N, STx}, Ms) ->
+                  start_worker(N, STx, ProxyTrees, Env, DontVerify, Protocol, Ms)
+          end, {#{}, #{}}, IndexedTxs),
+    S#st{clients = Clients, pids = Pids}.
+
+start_worker(N, SignedTx, Trees, Env, DontVerify, CsPs) ->
+    start_worker(N, SignedTx, Trees, Env, DontVerify, get_protocol(Env), CsPs).
+
+start_worker(N, SignedTx, Trees, Env, DontVerify, Protocol, {Clients, Pids}) ->
     {Pid, MRef} = spawn_monitor(
-                     fun() ->
-                             apply_one_tx(SignedTx, Trees, Env, DontVerify)
-                     end),
-    PidMap#{N => {Pid, MRef, SignedTx}, Pid => {N, true}}.
+                    worker_spawn_f(SignedTx, Trees, Env, DontVerify, Protocol)),
+    {Clients#{N => {Pid, MRef, SignedTx}}, Pids#{Pid => N}}.
 
-restart_worker(Ix, Pid, #st{ clients     = Cs0
-                           , env         = Env
-                           , proxy_trees = ProxyTrees
-                           , dontverify  = DontVerify } = S) ->
-    lager:debug("Restarting worker ~p (~p)", [Ix, Pid]),
-    {_, MRef, SignedTx} = maps:get(Ix, Cs0),
-    erlang:demonitor(MRef),
-    exit(Pid, kill),
-    Cs = start_worker(Ix, SignedTx, Env, ProxyTrees, DontVerify, maps:remove(Pid, Cs0)),
-    S#st{clients = Cs}.
+-spec worker_spawn_f(signed_tx(), trees(), env(), boolean(), protocol()) ->
+          fun(() -> no_return()).
+%% If inlined, this fun makes Dialyzer complain.
+worker_spawn_f(SignedTx, Trees, Env, DontVerify, Protocol) ->
+    fun() ->
+            apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol)
+    end.
 
+get_protocol(Env) ->
+    aetx_env:consensus_version(Env).
 
-log_initial_deps(SignedTx, N, #st{ deps   = Deps0
-                                 , claims = Claims0 } = S) ->
+restart_workers(Restarts, St) ->
+    lists:foldl(fun restart_worker/2, St, Restarts).
+
+restart_worker(Ix, #st{ clients     = Cs0
+                      , pids        = Pids0
+                      , env         = Env
+                      , proxy_trees = ProxyTrees
+                      , dontverify  = DontVerify } = S) ->
+    case maps:find(Ix, Cs0) of
+        {ok, {Pid, MRef, SignedTx}} ->
+            lager:debug("Restarting worker ~p (~p)", [Ix, Pid]),
+            erlang:demonitor(MRef),
+            exit(Pid, kill),
+            {Cs, Pids} = start_worker(
+                           Ix, SignedTx, ProxyTrees, Env, DontVerify,
+                           {Cs0, maps:remove(Pid, Pids0)}),
+            S#st{clients = Cs, pids = Pids};
+        error ->
+            S
+    end.
+
+-spec prepare_for_par_eval([signed_tx()]) -> context().
+prepare_for_par_eval(SignedTxs) ->
+    {IndexedTxs, {TxCnt, {MaxDepCnt, Deps, Claims}}} =
+        lists:mapfoldl(
+          fun(SignedTx, {N, Acc}) ->
+                  { {N, SignedTx},
+                    {N+1, log_initial_deps(SignedTx, N, Acc)} }
+          end, {1, {0, #{}, #{}}}, SignedTxs),
+    #{ indexed       => IndexedTxs
+     , tx_count      => TxCnt
+     , max_dep_count => MaxDepCnt
+     , deps          => Deps
+     , claims        => Claims }.
+
+log_initial_deps(SignedTx, N, {Max0, Deps0, Claims0}) ->
     {Mod, Tx} = aetx:specialize_callback(aetx_sign:tx(SignedTx)),
     Ids = Mod:entities(Tx),
-    Deps =
+    {NewMax, Deps} =
         lists:foldl(
-          fun(Id, Depsx) ->
+          fun(Id, {Max, Depsx}) ->
                   Type = id_to_type(Id),
-                  maps:update_with({Type, Id}, fun(L) ->
-                                                       ordsets:add_element(N, L)
-                                               end, [], Depsx)
-          end, Deps0, Ids),
-    Claims = Claims0#{ N => Ids },
-    S#st{ deps = Deps, claims = Claims }.
+                  {Count, Depsx1} = update_dep(Type, Id, N, Depsx),
+                  {max(Count, Max), Depsx1}
+          end, {Max0, Deps0}, Ids),
+    Claims = Claims0#{ N => gb_sets:from_list(Ids) },
+    {NewMax, Deps, Claims}.
+
+update_dep(Type, Id, Ix, Deps) ->
+    Key = {Type, Id},
+    case maps:find(Key, Deps) of
+        {ok, Set} ->
+            Set1 = gb_sets:add_element(Ix, Set),
+            {gb_sets:size(Set1), Deps#{Key => Set1}};
+        error ->
+            {1, Deps#{Key => gb_sets:singleton(Ix)}}
+    end.
 
 %% We map dependencies keyed on {Type, Id} where Id is whatever it is the client
 %% looks up. In the case of txs, the entities are proper ids, but we can't necessarily
@@ -267,8 +251,9 @@ id_to_type(Id) ->
         channel    -> channels
     end.
 
-apply_one_tx(SignedTx, Trees, Env, DontVerify) ->
-    try aec_trees:apply_one_tx(SignedTx, Trees, Env, DontVerify) of
+-spec apply_one_tx(signed_tx(), trees(), env(), boolean(), protocol()) -> no_return().
+apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol) ->
+    try aec_trees:apply_one_tx(SignedTx, Trees, Env, DontVerify, Protocol) of
         {ok, _Trees1, Env1} ->
             exit({ok, aetx_env:events(Env1)});
         {error, _} = Err ->
@@ -279,40 +264,93 @@ apply_one_tx(SignedTx, Trees, Env, DontVerify) ->
             exit({Type, What})
     end.
 
-log_valid(true, Pid, #st{valid = Valid} = St) ->
-    St#st{valid = [Pid | Valid]};
-log_valid(false, Pid, #st{invalid = Invalid} = St) ->
-    St#st{invalid = [Pid | Invalid]}.
-
-serve_pending(#st{ clients = [Pid | _]
-                 , pending = Pend
-                 , trees   = Trees } = St) ->
-    case lists:keyfind(Pid, 1, Pend) of
+-spec log_valid(boolean(), index(), #st{}) -> #st{}.
+log_valid(IsValid, Ix, #st{valid = Valid, invalid = Invalid, clients = Cs} = St) ->
+    {_, _, SignedTx} = maps:get(Ix, Cs),
+    case IsValid of
+        true->
+            St#st{valid = [SignedTx | Valid]};
         false ->
-            St;
-        {_, Ref, Req} ->
-            {Res, Trees1} = handle_req(Req, Pid, Trees),
-            gen_server:reply(Ref, Res),
-            St#st{pending = lists:keydelete(Pid, 1, Pend), trees =  Trees1}
+            St#st{invalid = [SignedTx | Invalid]}
     end.
 
-handle_req({aeu_mtrees, get, F, Type, Args} = Req, {Pid,Ref}, #st{deps = Deps} = St) ->
-    case check_deps(Type, get, Key, Pid, St) of
-        {reply, _, _} = Reply ->
-            Reply;
+maybe_add_pend(Mode, Ix, Req, #st{pending = Pend} = St) ->
+    case Mode of
+        new   -> St#st{pending = gb_trees:insert(Ix, Req, Pend)};
+        retry -> St
+    end.
+
+maybe_remove_pend(Mode, Ix, #st{pending = Pend} = St) ->
+    case Mode of
+        retry -> St#st{pending = gb_trees:delete_any(Ix, Pend)};
+        new   -> St
+    end.
+
+serve_pending(#st{ pending = Pend } = St) ->
+    I = gb_trees:iterator(Pend),
+    serve_pending(gb_trees:next(I), St).
+
+serve_pending(none, St) ->
+    St;
+serve_pending({Ix, Req, I}, #st{pending = Pend, status = Status} = St) ->
+    case is_done(Ix, Status) of
+        true ->
+            St1 = St#st{pending = gb_trees:delete_any(Ix, Pend)},
+            serve_pending(gb_trees:next(I), St1);
+        false ->
+            St1 = try_serve_req(Req, Ix, St, retry),
+            serve_pending(gb_trees:next(I), St1)
+    end.
+
+handle_req(Req, Pid, #st{pids = Pids} = St) ->
+    case maps:find(Pid, Pids) of
+        {ok, Ix} ->
+            try_serve_req(Req, Ix, St, new);
+        error ->
+            {reply, {'$fail', unknown_pid}, St}
+    end.
+
+try_serve_req(#req{op = Op, type = Type, f = F, args = Args, from = From} = Req, Ix, St, Mode) ->
+    case check_deps(Req, Ix, St) of
+        {reply, Reply, St1} ->
+            gen_server:reply(From, Reply),
+            maybe_remove_pend(Mode, Ix, St1);
         {ok, St1} ->
-            Res = try_req(fun() ->
-                                  aeu_mtrees:lookup(Key, aec_trees:get_mtree(Type, Trees))
-                          end),
-            {reply, Res, St1};
+            {Res, St2} = perform_req(Op, F, Args, Type, St1),
+            gen_server:reply(From, Res),
+            maybe_remove_pend(Mode, Ix, St2);
         {wait, St1} ->
-            {noreply, add_pending(Pid, Ref, Req, St1)};
-        {error, _} = Err ->
-            {reply, {'$fail', Err}, st}
+            maybe_add_pend(Mode, Ix, Req, St1)
+        %% {error, _} = Err ->
+        %%     gen_server:reply(From, {'$fail', Err}),
+        %%     maybe_remove_pend(Mode, Ix, St)
     end.
 
-add_pending(Pid, Ref, Req, #st{pending = Pend} = St) ->
-    St#st{pending = [{Pid, Ref, Req} | Pend]}.
+perform_req(get, F, Args, Type, St) ->
+    {perform_get(F, Args, Type, St), St};
+perform_req(put, F, Args, Type, St) ->
+    {Res, Tree} = perform_put(F, Args, Type, St),
+    {Res, set_mtree(Type, Tree, St)}.
+
+perform_get(lookup, {Key}, Type, St) ->
+    aeu_mtrees:lookup(Key, get_mtree(Type, St));
+perform_get(read_only_subtree, {Key}, Type, St) ->
+    aeu_mtrees:read_only_subtree(Key, get_mtree(Type, St));
+perform_get(root_hash, {}, Type, St) ->
+    aeu_mtrees:root_hash(get_mtree(Type, St)).
+
+perform_put(delete, {Key}, Type, St) ->
+    aeu_mtrees:delete(Key, get_mtree(Type, St));
+perform_put(enter, {Key, Value}, Type, St) ->
+    aeu_mtrees:enter(Key, Value, get_mtree(Type, St));
+perform_put(insert, {Key, Value}, Type, St) ->
+    aeu_mtrees:insert(Key, Value, get_mtree(Type, St)).
+
+get_mtree(Type, #st{trees = Trees}) ->
+    aec_trees:get_mtree(Type, Trees).
+
+set_mtree(Type, Tree, #st{trees = Trees} = St) ->
+    St#st{trees = aec_trees:set_mtree(Type, Tree, Trees)}.
 
 deps_ids(root_hash, _, Type, _Trees) ->
     [{Type, root_hash}];
@@ -331,117 +369,115 @@ deps_ids(read_only_subtree, {Key}, Type, Trees) ->
     Tree = aec_trees:get_mtree(Type, Trees),
     case aeu_mtrees:read_only_subtree(Key, Tree) of
         {ok, Subtree} ->
-            {[ {Type, K} || {leaf, K} <- aeu_mtrees:unfold(Subtree) ], Subtree};
+            {[ {Type, K} || {K, _} <- aeu_mtrees:to_list(Subtree) ], Subtree};
         {error, _} ->
             []
     end.
 
-check_deps(Type, F, Args, Pid, #st{trees = Trees} = St) ->
+check_deps(#req{type = Type, f = F, args = Args}, Ix, #st{trees = Trees} = St) ->
     case deps_ids(F, Args, Type, Trees) of
         {Ids, CachedResult} ->
             %% e.g. for read_only_subtree
-            case check_deps_ids(Ids, Pid, St) of
+            case check_deps_ids(Ids, Ix, St) of
                 {ok, St1} ->
                     {reply, CachedResult, St1};
                 Other ->
                     Other
             end;
         Ids when is_list(Ids) ->
-            check_deps_ids(Ids, St)
+            check_deps_ids(Ids, Ix, St)
     end.
 
-check_deps_ids([], Pid, St) ->
-    {ok, St};
-check_deps_ids([Id|Ids], Pid, St) ->
-    case check_deps(Id, St) of
-        {ok, St1} ->
-            check_deps_ids(Ids, St1);
-        {wait   , _} = Wait    -> Wait;
-        {restart, _} = Restart -> Restart;
-        {error  , _} = Error   -> Error
+check_deps_ids(Ids, Ix, St) ->
+    check_deps_ids(Ids, Ix, St, []).
+
+check_deps_ids([], _Ix, St, Restarts) ->
+    {ok, restart_workers(Restarts, St)};
+check_deps_ids([Id|Ids], Ix, St, Restarts0) ->
+    case check_deps_for_id(Id, Ix, St) of
+        {ok, Restart, St1} ->
+            check_deps_ids(Ids, Ix, St1, Restarts0 ++ Restart);
+        {wait, [], St1} ->
+            {wait, restart_workers(Restarts0, St1)};
+        {restart, _, _} = Restart ->
+            %% We ignore the accumulated restart candidates and restart requester instead
+            Restart
     end.
 
-check_deps(Id, Pid, #st{ clients = Cs
-                       , claims  = Claims
-                       , done    = Done } = S) ->
-    case maps:find(Pid, Cs) of
-        {ok, {Ix, FirstAccess}} ->
-            Id = {Type, Key},
-            {Action, Claims1} check_claim(Id, Ix, FirstAccess, Claims, Done),
-            {Action, S#st{ claims = Claims1
-                         , clients = Cs#{Pid => {Ix, false}}}};
-            %%     {wait,  Claims1} ->
-            %%         S1 = S#st{ clients = Cs#{Pid => {Ix, false}}
-            %%                  , claims = Claims1 },
-            %%         {wait, S1};
+check_deps_for_id(Id, Ix, #st{ deps    = Deps
+                             , claims  = Claims
+                             , status  = Status } = S) ->
+    {Action, Restart, Deps1, Claims1} = check_claim(Id, Ix, Deps, Claims, Status),
+    {Action, Restart, S#st{ deps   = Deps1
+                          , claims = Claims1
+                          , status = Status#{Ix => ongoing} }}.
 
-            %%                 %% We have identified a dependency, but have already started
-            %%                 %% accessing the state trees.
-            %%                 {noreply, restart_worker(Ix, Pid, S)}
-            %%         end
-            %% end;
-        error ->
-            {error, unknown_pid}
-    end.
-
-check_claim(Id, Ix, FirstAccess, Claims, Done) ->
-    case maps:find(Id, Claims) of
-        {ok, IdClaims} ->
-            IdClaims1 = prune_claims(IdClaims, Ix, Done),
-            case IdClaims1 of
-                [Ix|_] ->
-                    {ok, Claims#{Id => IdClaims1}};
-                [HdIx|Tl] when HdIx < Ix ->
-                    {wait_or_restart(FirstAccess, Ix Tl),
-                     Claims#{Id => IdClaims1}};
-                Other ->
-                    %% [], or [HdIx|_] when HdIx > Ix
-                    {ok, Claims#{Id => [Ix|Other]}}
+check_claim(Id, Ix, Deps, Claims, Status) ->
+    case maps:find(Id, Deps) of
+        {ok, IdDeps} ->
+            {First, IdDeps1} = prune_deps(IdDeps, Status),
+            case First of
+                Ix ->
+                    {ok, [], Deps, Claims};
+                HdIx when HdIx < Ix ->
+                    Action = wait_or_restart(Ix, Status),
+                    {Action, [], Deps#{Id => gb_sets:add_element(Ix, IdDeps1)}, Claims};
+                empty ->
+                    {ok, [], Deps#{Id => gb_sets:singleton(Ix)}, add_claim(Ix, Id, Claims)};
+                HdIx when HdIx > Ix ->
+                    Restart = maybe_restart_rest(IdDeps1, Status),
+                    {ok, Restart, Deps#{Id => gb_sets:add_element(Ix, IdDeps1)},
+                    add_claim(Ix, Id, Claims)}
             end;
         error ->
-            {ok, Claims#{Id => [Ix]}}
+            {ok, [], Deps#{Id => gb_sets:singleton(Ix)}, add_claim(Ix, Id, Claims)}
     end.
 
-wait_or_restart(true, _, _) ->
-    wait;
-wait_or_restart(false, Ix, List) ->
-    case lists:member(Ix, List) of
+add_claim(Ix, Id, Claims) ->
+    maps:update_with(Ix, fun(Set) ->
+                                 gb_sets:add_element(Id, Set)
+                         end, gb_sets:singleton(Id), Claims).
+
+wait_or_restart(Ix, Status) ->
+    case is_ongoing(Ix, Status) of
         true ->
             restart;
         false ->
             wait
     end.
 
-prune_claims([H|T] =  Claims, Ix, Done) when H < Ix ->
-    case maps:is_key(H, Done) of
+maybe_restart_rest(Deps, Status) ->
+    gb_sets:fold(fun(Ix, Acc) ->
+                         maybe_restart_(Ix, Status, Acc)
+                 end, [], Deps).
+
+maybe_restart_(Ix, Status, Acc) ->
+    case is_ongoing(Ix, Status) of
         true ->
-            prune_claims(T, Ix, Done);
+            [Ix | Acc];
         false ->
-            Claims
-    end;
-prune_claims(Claims, _, _) ->
-    Claims.
+            Acc
+    end.
 
-int_get(Type, Key, Trees) ->
-    %% Note that a 'db_get' callback should return the same as
-    %% aeu_mtrees:lookup/2.
-    Tree = aec_trees:get_mtree(Type, Trees),
-    {ok, DB} = aeu_mtrees:db(Tree),
-    aec_db:ensure_activity(
-      async_dirty, fun() ->
-                           aeu_mp_trees_db:get(Key, DB)
-                   end).
+is_ongoing(Ix, Status) ->
+    ongoing == maps:get(Ix, Status, undefined).
 
-apply_updates(Type, Hash, Updates, Trees) ->
-    Tree = aec_trees:get_mtree(Type, Trees),
-    Tree1 = aeu_mp_trees:apply_proxy_updates(Hash, Updates, Tree),
-    aec_trees:set_mtree(Type, Tree1, Trees).
+is_done(Ix, Status) ->
+    done == maps:get(Ix, Status, undefined).
 
-%% int_put(Type, Key, Value, Trees) ->
-%%     Tree = aec_trees:get_mtree(Type, Trees),
-%%     Tree1 = aeu_mtrees:db_put(Key, Value, Tree),
-
-%%     {ok, aec_trees:set_mtree(Type, Tree1, Trees)}.
+prune_deps(Deps, Status) ->
+    case gb_sets:is_empty(Deps) of
+        true ->
+            empty;
+        false ->
+            {H, T} = gb_sets:take_smallest(Deps),
+            case is_done(H, Status) of
+                true ->
+                    prune_deps(T, Status);
+                false ->
+                    {H, Deps}
+            end
+    end.    
 
 get_tstore() ->
     case get(mnesia_activity_state) of
@@ -462,22 +498,22 @@ check_store(Ets) ->
 proxy_init(#{ type := Type
             , pid  := Pid }) ->
     #proxy_mp_tree{ mod = ?MODULE
-                  , state = #pstate{ cache = new_cache()
+                  , state = #pstate{ cache = #{}
                                    , type  = Type
                                    , pid   = Pid } }.
 
 proxy_get(Mod, F, Args, P) ->
-    call(Mod, get, F, Args, P).
+    call(#req{op = get, mod = Mod, f = F, args = Args}, P).
 
 proxy_put(Mod, F, Args, P) ->
-    call(Mod, put, F, Args, P).
+    call(#req{op = put, mod = Mod, f = F, args = Args}, P).
 
 proxy_iter(_Mod, _F, _Args, _I) ->
     error(nyi).
 
-call(Mod, Op, F, Args, #proxy_mp_tree{state = #pstate{ pid  = Proxy
-                                                     , type = Type}}) ->
-    case gen_server:call(Proxy, {?MODULE, {Mod, Op, F, Type, Args}}) of
+call(#req{} = Req, #proxy_mp_tree{state = #pstate{ pid  = Proxy
+                                                 , type = Type}}) ->
+    case gen_server:call(Proxy, {?MODULE, Req#req{type = Type}}) of
         {'$fail', Error} ->
             error(Error);
         Reply ->

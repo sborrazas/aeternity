@@ -9,7 +9,6 @@
 
 %% API
 -export([ commit_to_db/1
-        , list_cache/1
         , empty/0
         , empty_with_backend/0
         , enter_auth_call/2
@@ -149,10 +148,6 @@ root_hash(#call_tree{calls = CtTree}) ->
 -spec commit_to_db(tree()) -> tree().
 commit_to_db(#call_tree{calls = CtTree} = Tree) ->
     Tree#call_tree{calls = aeu_mtrees:commit_to_db(CtTree)}.
-
--spec list_cache(tree()) -> [{term(), term()}].
-list_cache(Tree) ->
-    aeu_mtrees:list_cache(Tree).
 
 -spec to_binary_without_backend(tree()) -> binary().
 to_binary_without_backend(#call_tree{calls = Tree}) ->
