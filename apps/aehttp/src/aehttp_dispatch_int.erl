@@ -331,7 +331,7 @@ produce_tx(dry_run_txs, Req) ->
     ParseFuns = [parse_map_to_atom_keys(),
                  read_required_params([txs]),
                  read_optional_params([{top, top, top}, {accounts, accounts, []},
-                                       {tx_events, tx_events, false}]),
+                                       {tx_events, tx_events, false}, {parallel, parallel, false}]),
                  do_dry_run()],
     process_request(ParseFuns, Req);
 produce_tx(name_preclaim_tx, Req) ->

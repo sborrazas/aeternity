@@ -21,10 +21,12 @@
         , is_db/1
         , get_cache/1
         , get_handle/1
+        , get_module/1
         , unsafe_write_to_backend/3
         ]).
 
--export([record_fields/1]).
+-export([ record_fields/1
+        , pp_term/1 ]).
 
 -export_type([ db/0
              , db_spec/0
@@ -64,6 +66,20 @@
 %% Trace support
 record_fields(db) -> record_info(fields, db);
 record_fields(_ ) -> no.
+
+pp_term(#db{ module = Mod
+           , cache  = Cache
+           , handle = Handle } = DB) ->
+    case Mod of
+        aeu_mp_trees ->
+            {yes, DB#db{ handle = {'$db', dict:to_list(Handle) }
+                       , cache  = {'$db', int_list_cache(DB)} }};
+        _ ->
+            {yes, DB#db{ cache = {'$db', Mod:mpt_db_list_cache(Cache)} }}
+    end;
+pp_term(_) ->
+    no.
+
 %% ==================================================================
 
 %%%===================================================================
@@ -128,6 +144,10 @@ get_handle(DB) ->
     #db{handle = Handle} = to_new_db(DB),
     Handle.
 
+-spec get_module(db()) -> atom().
+get_module(#db{module = Module}) ->
+    Module.
+
 %%%===================================================================
 %%% Cache
 %%%===================================================================
@@ -140,6 +160,9 @@ int_cache_put(Key, Val, #db{cache = Cache, module = M} = DB) ->
 
 int_drop_cache(#db{cache = Cache, module = M} = DB) ->
     DB#db{cache = M:mpt_db_drop_cache(Cache)}.
+
+int_list_cache(#db{cache = Cache, module = M}) ->
+    M:mpt_db_list_cache(Cache).
 
 %%%===================================================================
 %%% DB
