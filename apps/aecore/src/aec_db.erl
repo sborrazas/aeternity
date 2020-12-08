@@ -13,6 +13,7 @@
          tables/1,                      % for e.g. test database setup
          clear_db/0,                    % mostly for test purposes
          tab_copies/1,                  % for create_tables hooks
+         check_table/1,
          check_table/3,                 % for check_tables hooks
          tab/4,
          persisted_valid_genesis_block/0
@@ -96,6 +97,12 @@
         , find_block_state_and_data/1
         ]).
 
+-export([ blacklist_lookup/1
+        , blacklist_add/2
+        , blacklist_remove/1
+        , blacklist_list/0
+        , blacklist_clear/0 ]).
+%%
 %% for testing
 -export([backend_mode/0]).
 
@@ -148,13 +155,14 @@ tables(Mode) ->
    , ?TAB(aec_tx_pool)
    , ?TAB(aec_discovered_pof)
    , ?TAB(aec_signal_count)
+   , ?TAB(aec_blacklist)
     ].
 
 tab(Mode0, Record, Attributes, Extra) ->
     Mode = expand_mode(Mode0),
     UserProps = maps:get(user_properties, Mode, []),
     UserProps1 = [{vsn, tab_vsn(Record)} | UserProps],
-    [ tab_copies(Mode)
+    [ tab_copies(Mode, Record)
     , {type, tab_type(Record)}
     , {attributes, Attributes}
     , {user_properties, UserProps1}
@@ -164,6 +172,15 @@ tab(Mode0, Record, Attributes, Extra) ->
 tab_vsn(_) -> 1.
 
 tab_type(_) -> set.
+
+tab_copies(Mode, aec_blacklist) ->
+    Type = case expand_mode(Mode) of
+               #{persist := true } ->  disc_copies;
+               #{persist := false} ->  ram_copies
+           end,
+    {Type, [node()]};
+tab_copies(Mode, _) ->
+    tab_copies(Mode).
 
 tab_copies(Mode) when Mode == ram; Mode == disc ->
     tab_copies(expand_mode(Mode));
@@ -712,6 +729,28 @@ fold_mempool(FunIn, InitAcc) ->
           end,
     ?t(mnesia:foldl(Fun, InitAcc, aec_tx_pool)).
 
+
+blacklist_clear() ->
+    ?t(mnesia:clear_table(aec_blacklist)).
+
+blacklist_list() ->
+    ?t(mnesia:select(aec_blacklist,
+                     [{ #aec_blacklist{key = '$1', _ = '_'}, [], ['$1'] }])).
+
+blacklist_add(Key, Value) ->
+    ?t(mnesia:write(#aec_blacklist{key = Key, value = Value})).
+
+blacklist_remove(Key) ->
+    ?t(mnesia:delete({aec_blacklist, Key})).
+
+blacklist_lookup(Key) ->
+    ?t(case mnesia:read(aec_blacklist, Key) of
+           [#aec_blacklist{value = Val}] ->
+               Val;
+           [] ->
+               none
+       end).
+
 %% start phase hook to load the database
 
 load_database() ->
@@ -811,6 +850,10 @@ handle_table_errors(Tables, Mode, [{missing_table, aec_signal_count = Table} | T
 handle_table_errors(Tables, Mode, [{missing_table, aesc_state_cache_v2} | Tl]) ->
     aesc_db:create_tables(Mode),
     handle_table_errors(Tables, Mode, Tl);
+handle_table_errors(Tables, Mode, [{missing_table, aec_blacklist = T} | Tl]) ->
+    {T, Spec} = lists:keyfind(T, 1, Tables),
+    {atomic, ok} = mnesia:create_table(T, Spec),
+    handle_table_errors(Tables, Mode, Tl);
 handle_table_errors(Tables, Mode, [{callback, {Mod, Fun, Args}} | Tl]) ->
     apply(Mod, Fun, Args),
     handle_table_errors(Tables, Mode, Tl);
@@ -823,6 +866,12 @@ check_mnesia_tables([{Table, Spec}|Left], Acc) ->
     check_mnesia_tables(Left, NewAcc);
 check_mnesia_tables([], Acc) ->
     fold_hooks('$aec_db_check_tables', Acc).
+
+check_table(Table) ->
+    Mode = backend_mode(),
+    Tabs = [TSpec || {T,_} = TSpec <- tables(Mode),
+                     T == Table],
+    handle_table_errors(Tabs, Mode, check_mnesia_tables(Tabs, [])).
 
 check_table(Table, Spec, Acc) ->
     try
