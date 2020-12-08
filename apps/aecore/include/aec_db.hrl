@@ -19,3 +19,5 @@
 -record(aec_discovered_pof     , {key, value}).
 -record(aec_signal_count       , {key :: KeyBlockHash :: aec_blocks:block_header_hash(), value :: SignalCount :: non_neg_integer()}).
 -record(aec_peers              , {key :: aec_peer:id(), value :: aec_peer:peer()}).
+
+-record(aec_blacklist          , {key :: aeser_id:id(), value :: aec_blacklist:entry()}).

@@ -676,8 +676,9 @@ tx_pool_test_() ->
                %% Prepare a chain with specific genesis block with some funds
                PubKey1 = new_pubkey(),
                PubKey2 = new_pubkey(),
+               PubKey3 = new_pubkey(),
                meck:expect(aec_fork_block_settings, genesis_accounts, 0,
-                  [{PubKey1, 100000}, {PubKey2, 100000}]),
+                  [{PubKey1, 100000}, {PubKey2, 100000}, {PubKey3, 100000}]),
                aec_consensus:set_genesis_hash(),
                {GenesisBlock, _} = aec_block_genesis:genesis_block_with_state(),
                aec_test_utils:start_chain_db(),
@@ -719,6 +720,11 @@ tx_pool_test_() ->
                STx4 = a_signed_tx(PubKey1, new_pubkey(), 6, 0),
                ?assertEqual({error, too_low_fee}, aec_tx_pool:push(STx4)),
 
+               %% A transaction from a blacklisted account should be rejected
+               STx5 = a_signed_tx(PubKey3, new_pubkey(), 1, 20000),
+               ok = aec_blacklist:add(acct(PubKey3), <<"test blacklist">>),
+               ?assertEqual({error, blacklisted}, aec_tx_pool:push(STx5)),
+
                %% A transaction with too low gas price should be rejected
                meck:expect(aec_governance, minimum_gas_price, 1, 1),
                ?assertEqual(ok, aec_tx_pool:push(signed_ct_create_tx(PubKey1, 10, 1000000, 1))),
@@ -748,8 +754,8 @@ tx_pool_test_() ->
                {ok,_} = aec_chain_state:insert_block(Candidate2),
                ?assertEqual(Top2, aec_chain:top_block_hash()),
 
-               STx5 = a_signed_tx(PubKey1, new_pubkey(), 6, 40000, 1),
-               ?assertEqual({error, ttl_expired}, aec_tx_pool:push(STx5)),
+               STx6 = a_signed_tx(PubKey1, new_pubkey(), 6, 40000, 1),
+               ?assertEqual({error, ttl_expired}, aec_tx_pool:push(STx6)),
 
                ok
        end},
