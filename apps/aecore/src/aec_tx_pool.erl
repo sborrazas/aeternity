@@ -843,10 +843,12 @@ int_check_account_nonce(Tx, Source, Event) ->
                 {error, no_state_trees} -> nonce_baseline_check(TxNonce, CheckNonce);
                 none -> nonce_baseline_check(TxNonce, CheckNonce);
                 {value, Account} ->
+                    Blocked = aec_pool_filter:is_blocked(aec_accounts:id(Account)),
                     Offset   = nonce_offset(),
                     AccNonce = aec_accounts:nonce(Account),
                     AccType  = aec_accounts:type(Account),
                     if
+                        Blocked -> {error, account_blocked};
                         AccType == generalized andalso TxNonce =:= 0 ->
                             ok;
                         AccType == generalized ->
