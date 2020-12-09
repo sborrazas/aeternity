@@ -736,7 +736,7 @@ pool_filter_clear() ->
 -dialyzer({nowarn_function, pool_filter_list/0}).
 pool_filter_list() ->
     ?t(mnesia:select(aec_pool_filter,
-                     [{ #aec_pool_filter{key = '$1', _ = '_'}, [], ['$1'] }])).
+                     [{ #aec_pool_filter{value = '$1', _ = '_'}, [], ['$1'] }])).
 
 pool_filter_add(Key, Value) ->
     ?t(mnesia:write(#aec_pool_filter{key = Key, value = Value})).

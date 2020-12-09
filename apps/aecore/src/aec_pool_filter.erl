@@ -9,7 +9,8 @@
 
 -export([bootstrap/0]).
 
--export([ serialize_for_client/1 ]).
+-export([ serialize_for_client/1
+        , list_for_client/0 ]).
 
 -export_type([ entry/0 ]).
 
@@ -20,6 +21,9 @@
 
 list() ->
     aec_db:pool_filter_list().
+
+list_for_client() ->
+    [serialize_for_client(E) || E <- list()].
 
 is_blocked(Id) ->
     if_id(
