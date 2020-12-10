@@ -42,6 +42,9 @@
 %% Supervisor callbacks
 -export([init/1]).
 
+%% bootstrapping helper
+-export([ child_spec/1 ]).
+
 -include("blocks.hrl").
 
 -define(SERVER, ?MODULE).
@@ -65,6 +68,7 @@ init([]) ->
         ++ maybe_upnp_worker()
         ++ [?CHILD(aec_metrics_rpt_dest, 5000, worker),
             ?CHILD(aec_keys, 5000, worker),
+            ?CHILD(aec_pool_filter, 5000, worker),
             ?CHILD(aec_tx_pool, 5000, worker),
             ?CHILD(aec_tx_pool_gc, 5000, worker),
             ?CHILD(aec_db_error_store, 5000, worker),
@@ -78,6 +82,15 @@ init([]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+child_spec(Id) ->
+    {ok, {_, Specs}} = init([]),
+    case lists:keyfind(Id, 1, Specs) of
+        false ->
+            undefined;
+        Spec ->
+            Spec
+    end.
 
 watchdog_childspec() ->
     {watchdog, {gen_serv, start, [watchdog]},
