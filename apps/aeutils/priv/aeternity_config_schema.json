@@ -208,6 +208,11 @@
                     "description": "Provide node version to peers",
                     "type" : "boolean",
                     "default": true 
+                },
+                "enable_fast_sync" : {
+                    "description": "Enable fast sync.",
+                    "type" : "boolean",
+                    "default": false 
                 }
             }
         },

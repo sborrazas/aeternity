@@ -38,6 +38,7 @@
 
 -define(MAX_HEADERS_PER_CHUNK, 100).
 -define(DEFAULT_MAX_GOSSIP, 16).
+-define(DEFAULT_FAST_SYNC, false).
 
 %%%=============================================================================
 %%% API
@@ -1068,6 +1069,11 @@ get_worker_for_peer(#state{ sync_tasks = STs }, PeerId) ->
         [] -> false;
         [Pid | _] -> {ok, Pid}
     end.
+
+fast_sync() ->
+    aeu_env:user_config_or_env([<<"sync">>, <<"enable_fast_sync">>],
+                               aecore, enable_fast_sync,
+                               ?DEFAULT_FAST_SYNC).
 
 max_gossip() ->
     aeu_env:user_config_or_env([<<"sync">>, <<"max_gossip">>],
