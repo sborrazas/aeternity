@@ -168,20 +168,10 @@
                     "type" : "integer",
                     "default" : 0
                 },
-                "block_whitelist" : {
-                    "type" : "object",
-                    "additionalProperties" : false,
-                    "properties" : {
-                        "set" : {
-                            "$ref" : "#/definitions/whitelist_objects"
-                        },
-                        "add" : {
-                            "$ref" : "#/definitions/whitelist_objects"
-                        },
-                        "del" : {
-                            "$ref" : "#/definitions/whitelist_objects"
-                        }
-                    }
+                "whitelist_file" : {
+                    "description" : "The name of a block hash whitelist file (JSON format)",
+                    "type" : "string",
+                    "default" : "$DATA_DIR/aecore/.block_whitelist.json"
                 },
                 "log_peer_connection_count_interval" : {
                     "description": "Time (milliseconds) between logging info about connected peers",
@@ -1239,15 +1229,6 @@
     "definitions" : {
         "key_value_pattern": {
             "pattern" : "^[a-zA-Z0-9\\-_\\.]+\\h*:\\h*[0-9]+(\\h*,\\h*[a-zA-Z_]+\\h*:\\h*[0-9]+)*"
-        },
-        "whitelist_objects" : {
-            "type" : "array",
-            "items" : {
-                "type" : "string",
-                "description" : "Array of Height:KeyBlockHash strings",
-                "pattern" : "^[0-9]+:kh_[1-9A-HJ-NP-Za-km-z]+$",
-                "example" : "365349:kh_pgnGHhUWtK8ae4GGQrnswVdbMnyAFxvP6HUHQT2Utpmgr9mss"
-            }
         }
     }
 }
