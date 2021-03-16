@@ -12,7 +12,9 @@
     aecore
    ]},
   {mod,{aestratum_appsup,[]}},
-  {env, []},
+  {env, [
+         {ae_run_in_maintenance_mode, false}
+        ]},
   {modules, []},
   {maintainers, []},
   {licenses, []},

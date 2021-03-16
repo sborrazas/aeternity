@@ -16,7 +16,9 @@
     gproc,
     ephemeral
    ]},
-  {env,[]},
+  {env,[
+        {ae_run_in_maintenance_mode, false}
+       ]},
   {modules, []},
 
   {maintainers, []},

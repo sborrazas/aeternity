@@ -15,6 +15,7 @@
   {env,[
          {'$aec_db_create_tables', {aesc_db, create_tables}}
        , {'$aec_db_check_tables' , {aesc_db, check_tables}}
+       , {ae_run_in_maintenance_mode, false}
        ]},
   {modules, []},
   {maintainers, []},

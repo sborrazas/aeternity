@@ -52,26 +52,33 @@ stop(_State) ->
 check_env() ->
     check_env([{[<<"logging">>, <<"hwm">>]     , fun set_hwm/1},
                {[<<"logging">>, <<"level">>]   , fun set_level/1},
-               {[<<"mining">>, <<"autostart">>], {set_env, autostart}},
+               {[<<"mining">>, <<"autostart">>], fun set_autostart/2},
                {[<<"mining">>, <<"strictly_follow_top">>], {set_env, strictly_follow_top}},
                {[<<"mining">>, <<"attempt_timeout">>], {set_env, mining_attempt_timeout}},
                {[<<"chain">>, <<"persist">>]   , {set_env, persist}},
                {[<<"chain">>, <<"db_path">>]   , fun set_mnesia_dir/1}]).
 
 check_env(Spec) ->
+    {ok, MMode} = aeu_env:find_config([<<"system">>, <<"maintenance_mode">>],
+                                      [user_config, schema_default]),
     lists:foreach(
       fun({K, F}) ->
               case aeu_env:user_config(K) of
                   undefined -> ignore;
-                  {ok, V}   -> set_env(F, V)
+                  {ok, V}   -> set_env(F, V, MMode)
               end
       end, Spec).
 
-set_env({set_env, K}, V) when is_atom(K) ->
+set_env({set_env, K}, V, _MMode) when is_atom(K) ->
     io:fwrite("setenv K=~p, V=~p~n", [K, V]),
     application:set_env(aecore, K, V);
-set_env(F, V) when is_function(F, 1) ->
-    F(V).
+set_env(F, V, _MMode) when is_function(F, 1) ->
+    F(V);
+set_env(F, V, MMode) when is_function(F, 2) ->
+    F(V, MMode).
+
+set_autostart(V, MMode) ->
+    application:set_env(aecore, autostart, V andalso (not MMode)).
 
 set_mnesia_dir(Path) ->
     MnesiaDir = filename:join(binary_to_list(Path), "mnesia"),

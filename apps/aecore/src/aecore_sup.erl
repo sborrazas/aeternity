@@ -71,15 +71,19 @@ init([]) ->
             ?CHILD(aec_db_error_store, 5000, worker),
             ?CHILD(aec_resilience, 5000, worker),
             ?CHILD(aec_db_gc, 5000, worker),
-            ?CHILD(aec_conductor_sup, 5000, supervisor),
-            ?CHILD(aec_connection_sup, 5000, supervisor)
-           ],
+            ?CHILD(aec_conductor_sup, 5000, supervisor) ]
+        ++ [ ?CHILD(aec_connection_sup, 5000, supervisor) || not maintenance_mode() ],
 
     {ok, {{one_for_one, 5, 10}, ChildSpecs}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+maintenance_mode() ->
+    {ok, Flag} = aeu_env:find_config([<<"system">>, <<"maintenance_mode">>], [user_config,
+                                                                              schema_default]),
+    Flag.
 
 watchdog_childspec() ->
     {watchdog, {gen_serv, start, [watchdog]},
