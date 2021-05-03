@@ -32,7 +32,6 @@
 -export([
           table_specs/1
         , check_tables/1
-        , create_tables/1
         ]).
 
 -define(TAB(Record),
@@ -62,10 +61,6 @@ check_tables(Acc) ->
       fun({Tab, Spec}, Acc1) ->
               aec_db:check_table(Tab, Spec, Acc1)
       end, Acc, table_specs(disc)).
-
-create_tables(Mode) ->
-    Specs = table_specs(Mode),
-    [{atomic, ok} = mnesia:create_table(Tab, Spec) || {Tab, Spec} <- Specs].
 
 %%%===================================================================
 %%% API
