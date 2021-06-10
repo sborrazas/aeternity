@@ -25,6 +25,7 @@ get_paths(Target, LogicHandler) ->
             Endpoints =
                 case SpecVsn of
                     ?OAS3 -> oas_endpoints;
+                    ?ROSETTA -> rosetta_endpoints;
                     ?SWAGGER2 -> endpoints
                 end,
             [{path(Path), aehttp_api_handler,

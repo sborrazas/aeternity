@@ -24,6 +24,6 @@ set_version(Yaml) ->
     UpdatedInfo = lists:keyreplace(<<"version">>, 1, OldInfo, {<<"version">>, aeu_info:get_version()}),
     lists:keyreplace(<<"info">>, 1, Yaml, {<<"info">>, UpdatedInfo}).
 
-filename(?SWAGGER2) -> "swagger.yaml";
-filename(?OAS3) -> "oas3.yaml".
-
+filename(?OAS3)     -> "oas3.yaml";
+filename(?ROSETTA)  -> "rosetta.yaml";
+filename(?SWAGGER2) -> "swagger.yaml".

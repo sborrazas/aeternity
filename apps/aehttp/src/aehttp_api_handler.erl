@@ -26,8 +26,9 @@
 init(Req, {SpecVsn, OperationId, AllowedMethod, LogicHandler}) ->
     Mod =
         case SpecVsn of
-            oas3 -> oas_endpoints;
-            swagger2 -> endpoints
+            ?OAS3 -> oas_endpoints;
+            ?ROSETTA -> rosetta_endpoints;
+            ?SWAGGER2 -> endpoints
         end,
     State = #state{
         operation_id = OperationId,
