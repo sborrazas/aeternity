@@ -871,7 +871,10 @@ int_check_account_nonce(Tx, Source, Event) ->
                 {error, no_state_trees} -> nonce_baseline_check(TxNonce, CheckNonce);
                 none -> nonce_baseline_check(TxNonce, CheckNonce);
                 {value, Account} ->
-                    BlackListed = aec_blacklist:is_blocked(aec_accounts:id(Account)),
+                    BlackListed = lists:any(
+                                    fun(Id) ->
+                                            aec_blacklist:is_blocked(Id)
+                                    end, [aec_accounts:id(Account) | tx_ids(Unsigned)]),
                     Offset   = nonce_offset(),
                     AccNonce = aec_accounts:nonce(Account),
                     AccType  = aec_accounts:type(Account),
@@ -887,6 +890,14 @@ int_check_account_nonce(Tx, Source, Event) ->
                         TxNonce >  (AccNonce + Offset) -> {error, nonce_too_high}
                     end
             end
+    end.
+
+tx_ids(Tx) ->
+    case aetx:specialize_callback(Tx) of
+        {aect_call_tx, TxI} ->
+            [ aect_call_tx:contract_id(TxI) ];
+        _ ->
+            []
     end.
 
 nonce_check_by_event(tx_created) -> true;

@@ -94,11 +94,12 @@ if_id(Id, F) when is_function(F, 1) ->
             end
     end.
 
-try_make_id(<<"ak_", _/binary>> = AK) ->
-    case aeser_api_encoder:decode(AK) of
-        {account_pubkey, PK} ->
-            {ok, aeser_id:create(account, PK)};
-        _ ->
+try_make_id(Key) ->
+    case aeser_api_encoder:safe_decode(
+           {id_hash, [account_pubkey, contract_pubkey]}, Key) of
+        {ok, _} = Ok ->
+            Ok;
+        {error, _} ->
             error
     end.
 

@@ -1072,6 +1072,7 @@ fold_mempool(FunIn, InitAcc) ->
 blacklist_clear() ->
     ?t(mnesia:clear_table(aec_blacklist)).
 
+-dialyzer({nowarn_function, blacklist_list/0}).
 blacklist_list() ->
     ?t(mnesia:select(aec_blacklist,
                      [{ #aec_blacklist{key = '$1', _ = '_'}, [], ['$1'] }])).
