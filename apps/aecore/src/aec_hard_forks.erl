@@ -62,7 +62,7 @@ ensure_env() ->
             application:set_env(aecore, fork, Fork);
         undefined ->
             ok
-    end catch E:R:S -> lager:debug("~n~p:ensure_env/0 E: ~p R: ~p S: ~p~n",[?MODULE, E, R,S ]) end.
+    end catch E:R:S -> lager:info("~n~p:ensure_env/0 E: ~p R: ~p S: ~p~n",[?MODULE, E, R,S ]) end.
 
 %% This function is supposed to be used only when:
 %% - a new block is being added to the database (in aec_conductor);
