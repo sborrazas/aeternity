@@ -1,5 +1,4 @@
 FROM aeternity/builder:1804 as builder
-TODO Add REVISION and VERSION
 # Add required files to download and compile only the dependencies
 ADD rebar.config rebar.lock Makefile rebar3 rebar.config.script /app/
 ADD REVISION VERSION /app/
