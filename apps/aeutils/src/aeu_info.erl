@@ -20,9 +20,10 @@ get_revision() ->
 block_info() ->
     cached_file(block_info,
                 fun(block_info) ->
-                    binary_to_integer(re:replace(cached_file(?VERSION_FILE), "^(\\d+)\\.(\\d+)\\.(\\d+).*", "\\1\\2\\3",
+                    try binary_to_integer(re:replace(cached_file(?VERSION_FILE), "^(\\d+)\\.(\\d+)\\.(\\d+).*", "\\1\\2\\3",
                                                  [{return, binary}, global]))
-
+                    catch _E:_R -> 0
+                    end
                 end).
 
 get_os() ->
@@ -39,9 +40,10 @@ vendor() ->
 %% Internals
 
 read_trimmed_file(Filename) ->
-    case file:read_file(Filename) of
+    Path = filename:join([filename:dirname(setup:data_dir()), Filename]),
+    case file:read_file(Path) of
         {error, enoent} ->
-            <<>>;
+            error({not_found, Path});
         {ok, Content} ->
             trim_ending_whitespace(Content)
     end.
