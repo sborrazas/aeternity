@@ -25,7 +25,7 @@
 -define(STAKING_CONTRACT_ADDR, {?MODULE, staking_contract_addr}).
 %% Lima or Iris as we need the FATE VM at genesis
 %% In case that's unwanted then start up another consensus before hyperchains
--define(HC_GENESIS_VERSION, ?ROMA_PROTOCOL_VSN).
+-define(HC_GENESIS_VERSION, ?IRIS_PROTOCOL_VSN).
 
 %% Magic nonces
 -define(NONCE_HC_ENABLED, 16#ffffffffffffffff - 1).
@@ -545,7 +545,7 @@ genesis_raw_header() ->
         no_value,
         ?NONCE_HC_GENESIS,
         0,
-        default,
+        ?HC_GENESIS_VERSION,
         ?HC_GENESIS_VERSION).
 
 genesis_difficulty() -> 0.
