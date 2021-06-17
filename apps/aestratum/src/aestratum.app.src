@@ -13,7 +13,7 @@
    ]},
   {mod,{aestratum_appsup,[]}},
   {env, [
-         {ae_run_in_maintenance_mode, false}
+         %% {ae_run_in_maintenance_mode, false}
         ]},
   {modules, []},
   {maintainers, []},

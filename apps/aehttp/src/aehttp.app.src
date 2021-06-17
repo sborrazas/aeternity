@@ -17,7 +17,16 @@
     ephemeral
    ]},
   {env,[
-        {ae_run_in_maintenance_mode, false}
+        %% {ae_run_in_maintenance_mode, false}
+        {'$setup_hooks',
+         [
+           {ae_mmode_on, [
+                          {100, {aeu_oam, disable_supervisor, [aehttp_sup]}}
+                         ]}
+         , {ae_mmode_off, [
+                           {100, {aeu_oam, enable_supervisor, [aehttp_sup]}}
+                          ]}
+         ]}
        ]},
   {modules, []},
 

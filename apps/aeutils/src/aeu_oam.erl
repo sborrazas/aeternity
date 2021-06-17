@@ -12,6 +12,9 @@
 
 -export([ start_link/0 ]).
 
+-export([ enable_supervisor/1
+        , disable_supervisor/1 ]).
+
 -export([ init/1
         , handle_call/3
         , handle_cast/2
@@ -23,6 +26,28 @@
 
 -record(st, {current = false :: boolean()}).
 
+enable_supervisor(Sup) ->
+    ok.
+
+disable_supervisor(Sup) ->
+    case supervisor_info(Sup) of
+        {ok, Info} ->
+            disable_supervisor(Info, Sup);
+        {error, _} = Error ->
+            Error
+    end.
+
+disable_supervisor(#{ strategy := simple_one_for_one} = Info, Sup) ->
+    Children = supervisor:which_children(Sup),
+    lists:foreach(fun(Child) when is_pid(Child) ->
+                          case supervisor:terminate_child(Sup, Child) of
+                              ok -> ok;
+                              Other ->
+                                  lager:error("Error terminating child ~p: ~p",
+                                              [Child, Other])
+                          end
+                  end, Children).         
+
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
@@ -30,6 +55,7 @@ init([]) ->
     aec_events:subscribe(update_config),
     {ok, MMode} = aeu_env:find_config([<<"system">>, <<"maintenance_mode">>],
                                       [user_config, schema_default]),
+    lager:debug("Maintenance Mode flag: ~p", [MMode]),
     set_app_permissions(MMode),
     {ok, #st{current = MMode}}.
 
@@ -68,4 +94,36 @@ execute_callbacks(MMode) ->
               true  -> ae_mmode_off
            end,
     Hooks = setup:find_hooks(Mode),
-    setup:run_selected_hooks(Hooks).
+    setup:run_selected_hooks(Mode, Hooks).
+
+%% Helper functions
+
+is_supervisor(P) ->
+    case process_info(P) of
+        undefined ->
+            false;
+        D when is_list(D) ->
+            case proplists:get_value('$initial_call', D) of
+                {supervisor,_,_} ->
+                    true;
+                _ ->
+                    false
+            end
+    end.
+
+supervisor_info(Sup) ->
+    %% NOTE: Should the record definition in supervisor.erl change, this code needs to adapt
+    %% We don't fetch Children here, since it would give us an internal representation, which
+    %% partly changed in OTP 23.
+    case is_supervisor(Sup) of
+        true ->
+            case sys:get_state(Sup) of
+                {state, _Name, Strategy, _Children, _Dynamics,
+                 _Intensity, _Period, _Restarts, _DynRestarts, Mod, Args} ->
+                    {ok, #{ strategy => Strategy
+                          , mod  => Mod
+                          , args => Args }}
+            end;
+        false ->
+            {error, not_a_supervisor}
+    end.
