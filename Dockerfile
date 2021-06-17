@@ -9,6 +9,7 @@ RUN cd /app && make prod-compile-deps
 ADD . /app
 RUN cd /app && make prod-build
 
+ADD REVISION VERSION /app/
 # Put aeternity node in second stage container
 FROM ubuntu:18.04
 
@@ -28,6 +29,9 @@ RUN ln -fs librocksdb.so.6.13.3 /usr/local/lib/librocksdb.so.6.13 \
 
 # Deploy application code from builder container
 COPY --from=builder /app/_build/prod/rel/aeternity /home/aeternity/node
+
+# COPY VERSION build artefact
+COPY --from=builder /app/VERSION /home/aeternity/node
 
 # Aeternity app won't run as root for security reasons
 RUN useradd --shell /bin/bash aeternity \

@@ -545,7 +545,7 @@ genesis_raw_header() ->
         no_value,
         ?NONCE_HC_GENESIS,
         0,
-        ?HC_GENESIS_VERSION,
+        default,
         ?HC_GENESIS_VERSION).
 
 genesis_difficulty() -> 0.
