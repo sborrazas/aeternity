@@ -18,7 +18,6 @@ get_revision() ->
     cached_file(?REVISION_FILE).
 
 block_info() ->
-    lager:info("~nCached file: ~p~n",[cached_file(?VERSION_FILE)]),
     cached_file(block_info,
                 fun(block_info) ->
                     binary_to_integer(re:replace(cached_file(?VERSION_FILE), "^(\\d+)\\.(\\d+)\\.(\\d+).*", "\\1\\2\\3",
@@ -40,11 +39,9 @@ vendor() ->
 %% Internals
 
 read_trimmed_file(Filename) ->
-    Path = filename:join([filename:dirname(setup:data_dir()), Filename]),
-    lager:info("~nPath: ~p Res: ~p ~p ~p~n",[Path, file:read_file(Path), c:pwd(), c:ls()]),
-    case file:read_file(Path) of
+    case file:read_file(Filename) of
         {error, enoent} ->
-            error({not_found, Path});
+            <<>>;
         {ok, Content} ->
             trim_ending_whitespace(Content)
     end.
