@@ -107,7 +107,7 @@ protocols_from_network_id(<<"ae_uat">>) ->
      };
 
 protocols_from_network_id(<<"ae_hc_devnet">>) ->
-    #{ ?IRIS_PROTOCOL_VSN     => 0 };
+    #{ ?LIMA_PROTOCOL_VSN     => 0 };
 
 protocols_from_network_id(<<"local_roma_testnet">>) ->
     #{ ?ROMA_PROTOCOL_VSN     => 0
