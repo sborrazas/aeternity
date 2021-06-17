@@ -9,7 +9,6 @@ RUN cd /app && make prod-compile-deps
 ADD . /app
 RUN cd /app && make prod-build
 
-ADD REVISION VERSION /app/
 # Put aeternity node in second stage container
 FROM ubuntu:18.04
 
