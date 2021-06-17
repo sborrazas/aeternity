@@ -1,7 +1,8 @@
 FROM aeternity/builder:1804 as builder
-
+TODO Add REVISION and VERSION
 # Add required files to download and compile only the dependencies
 ADD rebar.config rebar.lock Makefile rebar3 rebar.config.script /app/
+ADD REVISION VERSION /app/
 ADD apps/aehyperchains/src/contracts/SimpleElection.aes /app/apps/aehyperchains/src/contracts/
 ENV ERLANG_ROCKSDB_OPTS "-DWITH_SYSTEM_ROCKSDB=ON -DWITH_LZ4=ON -DWITH_SNAPPY=ON -DWITH_BZ2=ON -DWITH_ZSTD=ON"
 
