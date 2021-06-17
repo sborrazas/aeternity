@@ -41,6 +41,7 @@ vendor() ->
 
 read_trimmed_file(Filename) ->
     Path = filename:join([filename:dirname(setup:data_dir()), Filename]),
+    lager:info("~nPath: ~p Res: ~p~n",[Path, file:read_file(Path)]),
     case file:read_file(Path) of
         {error, enoent} ->
             error({not_found, Path});
