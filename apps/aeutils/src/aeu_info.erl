@@ -18,6 +18,7 @@ get_revision() ->
     cached_file(?REVISION_FILE).
 
 block_info() ->
+    lager:info("~nCached file: ~p~n",[cached_file(?VERSION_FILE)]),
     cached_file(block_info,
                 fun(block_info) ->
                     binary_to_integer(re:replace(cached_file(?VERSION_FILE), "^(\\d+)\\.(\\d+)\\.(\\d+).*", "\\1\\2\\3",
