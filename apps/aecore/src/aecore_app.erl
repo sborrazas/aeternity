@@ -39,8 +39,10 @@ start_phase(start_reporters, _StartType, _PhaseArgs) ->
     aec_metrics:start_reporters();
 start_phase(register_delegate, _StartType, _PhaseArgs) ->
     %% Delegate registry procedure
+    %% TODO To relocate registry call before commitment stage
     lager:debug("start_phase(register_delegate, _, _)", []),
-    ok = aehc_parent_mng:register(aehc_utils:delegate()).
+%%    ok = aehc_parent_mng:register(aehc_utils:delegate()),
+    ok.
 
 prep_stop(State) ->
     aec_block_generator:prep_stop(),
