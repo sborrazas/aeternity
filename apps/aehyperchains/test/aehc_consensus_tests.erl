@@ -203,7 +203,7 @@ hc_from_genesis_test_() ->
             fun() ->
                 try
                     meck:new(aehc_utils, [passthrough]),
-                    aehc_consensus_hyperchains:set_hc_activation_criteria(1 * ?AE, 1, 5, 0),
+                    aehc_consensus_hyperchains:set_hc_activation_criteria({1 * ?AE, 1, 5, 0}),
                     %% Make the patron the delegate
                     #{pubkey := PatronPubkey} = Patron = aehc_test_utils:patron(),
                     {ok, ContractAddress} = aehc_consensus_hyperchains:get_staking_contract_address(),
@@ -272,7 +272,7 @@ hc_from_genesis_test_() ->
             fun() ->
                 try
                     meck:new(aehc_utils, [passthrough]),
-                    aehc_consensus_hyperchains:set_hc_activation_criteria(1 * ?AE, 1, 5, 0),
+                    aehc_consensus_hyperchains:set_hc_activation_criteria({1 * ?AE, 1, 5, 0}),
                     assert_static_staking_call_result({ok, false}, "enabled()"),
                     assert_static_staking_call_result({ok, 0}, "balance()"),
                     %% Use the patron to fund 2 accounts
