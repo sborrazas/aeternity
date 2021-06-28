@@ -585,6 +585,10 @@
                 "pattern": "^ct_[1-9A-HJ-NP-Za-km-z]*$",
                 "description": "The address of the deployed staking contract. If not set then the node will deploy a system staking contract when activating the consensus. Use when performing a onchain vote on enabling Hyperchain consensus."
               },
+              "stake": {
+                "description": "Initial amount of stake (in aettos, 1AE = 1e18 aettos) from beneficiary account",
+                "type": "integer"
+              },
               "activation_criteria": {
                 "type": "object",
                 "description": "Activation criteria of the hyperchain consensus. If not set HC will operate in PoW mode",
