@@ -82,6 +82,7 @@
         , channel_closing_on_chain/2
         , channel_closed_on_chain/2     %% (Fsm, Info)
         , channel_unlocked/2
+        , timer_fired/4
         ]). %% (Fsm, Info)
 
 %% gen_statem callbacks
@@ -428,6 +429,9 @@ channel_closed_on_chain(Fsm, Info) ->
 channel_unlocked(Fsm, Info) ->
     lager:debug("sending unlocked", []),
     gen_statem:cast(Fsm, {?CHANNEL_UNLOCKED, Info}).
+
+timer_fired(Fsm, ChanId, Data) ->
+    gen_statem:cast(Fsm, {?TIMER_FIRED, ChanId, Data}).
 
 %% NOTE: we currently double-book Role in both the #data{} record and
 %% the Opts map. This is a bit annoying, but simplifies the pattern-matching
@@ -4625,6 +4629,11 @@ handle_common_event_(cast, {?CHANNEL_CLOSED = OpTag, #{tx := SignedTx} = _Info} 
     %% Start a minimum-depth watch, then (if confirmed) terminate
     D2 = safe_watched_action_report(SignedTx, Msg, D, [], undefined, ?WATCH_CLOSED, OpTag, msg_type(Msg)),
     next_state(channel_closed, D2);
+handle_common_event_(cast, {?TIMER_FIRED = OpTag, _ChanId, Info} = Msg,
+                     _St, _, D) ->
+    report(info, #{ event => timer_fired
+                  , info  => Info }, D),
+    keep_state(D);
 handle_common_event_({call, From}, Req, St, Mode, D) ->
     case Mode of
         error_all ->

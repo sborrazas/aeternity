@@ -6,7 +6,8 @@
          watch/5,            %% (WatcherPid, Type, TxHash, MinimumDepth, Mod) -> ok
          watch_for_channel_close/3,
          watch_for_unlock/2,
-         watch_for_min_depth/5]).
+         watch_for_min_depth/5,
+         set_inactivity_timer/4]).
 
 -export([init/1,
          handle_call/3,
@@ -68,11 +69,13 @@
 -type mode()       :: close
                     | unlock
                     | tx_hash
-                    | watch.
+                    | watch
+                    | timer.
 
 -type req_info() :: #{ type         := any()
                      , parent       := pid()
-                     , callback_mod := module() }.
+                     , callback_mod := module()
+                     , data         => any() }.
 
 -type close_req() :: #{ mode      := close
                       , min_depth := aec_blocks:height()
@@ -89,7 +92,12 @@
                    , min_depth := aec_blocks:height()
                    , info      := req_info() }.
 
--type req() :: close_req() | unlock_req() | watch_req() | tx_req().
+-type timer_req() :: #{ mode  := timer
+                      , depth := aec_blocks:height()
+                      , info  := req_info() }.
+
+-type req() :: close_req() | unlock_req() | watch_req()
+             | tx_req() | timer_req().
 
 -type block_hash()  :: binary().
 -type tx_hash()     :: binary().
@@ -170,6 +178,9 @@ watch_for_unlock(ChanId, Mod) ->
 watch_for_min_depth(Pid, TxHash, MinDepth, Mod, Info) when is_pid(Pid) ->
     gen_server:call(Pid, min_depth_req(TxHash, MinDepth, Mod, Info)).
 
+set_inactivity_timer(Pid, Depth, Mod, Data) ->
+    gen_server:call(Pid, timer_req(Depth, Mod, Data)).
+
 close_req(MinDepth, Mod) ->
     #{ mode         => close
      , min_depth    => MinDepth
@@ -190,6 +201,15 @@ min_depth_req(TxHash, MinDepth, Mod, Type) ->
      , info      => #{ type         => Type
                      , parent       => self()
                      , callback_mod => Mod }}.
+
+timer_req(Depth, Mod, Data) ->
+    #{ mode  => timer
+     , depth => Depth
+     , check_at_height => Depth
+     , info  => #{ type         => timer
+                 , parent       => self()
+                 , callback_mod => Mod
+                 , data         => Data }}.
 
 get_txs_since({all_after_tx, _Hash} = StopCond, ChId) ->
     get_txs_since_(StopCond, ChId);
@@ -354,7 +374,8 @@ check_status(#{ prev_hash  := PHash
             lager:debug("found tx in top: ~p", [LastTx]),
             C = init_cache(I, St),
             C1 = C#{ scenario => {has_tx, LastTx} },
-            check_requests(Reqs, St, C1)
+            Reqs1 = lists:filter(fun not_timer_req/1, Reqs),
+            check_requests(Reqs1, St, C1)
     end;
 check_status(top, #st{ requests = Reqs } = St) ->
     do_dirty(
@@ -602,7 +623,17 @@ check_req(#{mode := tx_hash, tx_hash := TxHash, min_depth := MinDepth} = R,
             lager:debug("min_depth not yet achieved", []),
             {TopHeight, C2} = top_height(C1),
             {R#{check_at_height => TopHeight + (MinDepth - Depth)}, C2}
+    end;
+check_req(#{mode := timer, height := Height} = R, #{chan_id = ChanId}, C) ->
+    #{info := #{parent := Parent, data := Data}} = R,
+    case top_height(C) of
+        {TH, C1} when TH >= Height ->
+            Mod:timer_fired(Parent, ChanId, Data),
+            {done, C1};
+        {_, C1} ->
+            {R, C1}
     end.
+
 
 watch_for_channel_change(R, St, #{ scenario := Scenario } = C)
   when ?IS_SCENARIO(Scenario) ->
@@ -734,6 +765,9 @@ update_chan_vsn(#{ top_hash := Hash
         _ ->
             {St, Cache}
     end.
+
+not_timer_req(#{mode := timer}) -> false;
+not_timer_req(_) -> true.
 
 get_ch_status(ChId, Hash, C) ->
     case get_basic_ch_status_(ChId, Hash, C) of
