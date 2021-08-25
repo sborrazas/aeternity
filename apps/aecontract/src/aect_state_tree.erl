@@ -377,3 +377,5 @@ from_binary_without_backend(Bin) ->
 
 serialization_template(?VSN) ->
     [{contracts, binary}].
+
+
