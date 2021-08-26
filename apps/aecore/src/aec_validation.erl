@@ -22,8 +22,7 @@ validate_block(Block, Version) ->
         ok ->
             case aec_blocks:is_key_block(Block) of
                 true ->
-                    %%aec_blocks:validate_key_block(Block, Version);
-                    ok;
+                    aec_blocks:validate_key_block(Block, Version);
                 false ->
                     aec_blocks:validate_micro_block(Block, Version)
             end;
