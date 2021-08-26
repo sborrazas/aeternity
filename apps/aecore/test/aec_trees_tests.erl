@@ -747,7 +747,7 @@ repro_second_attempt_test_() ->
                       aec_trees:accounts(Trees0),
                       [owner_account()]),
               Trees = aec_trees:set_accounts(Trees0, AccountsTree),
-              Txs = [contract_create_tx1(), contract_create_tx2()],
+              Txs = [contract_create_tx1()],
               {ok, ValidTxs, InvalidTxs, UpdatedTrees, _Events}
                    = aec_trees:apply_txs_on_state_trees(Txs, Trees,
                                                  env(), [{strict, true},
@@ -755,9 +755,14 @@ repro_second_attempt_test_() ->
               {valid, Txs} = {valid, ValidTxs},
               {invalid, []} = {invalid, InvalidTxs},
               RootHash = aec_trees:hash(UpdatedTrees),
-              <<130,59,180,225,2,8,104,250,196,214,243,201,186,
-                              191,207,99,114,205,148,139,35,172,164,103,29,
-                              210,148,81,59,74,150,236>>
+              % OTP22
+              %<<49,37,196,56,249,139,197,28,183,233,229,59,231,
+              %                4,64,94,36,91,100,151,240,32,149,53,67,8,161,
+              %                136,154,179,128,45>>
+              % OTP21
+              <<208,220,240,11,120,30,187,107,21,246,196,58,241,
+                              186,26,207,172,207,65,226,90,224,98,108,131,225,
+                              189,169,214,34,61,203>>
                   = RootHash,
               ok
       end}].
