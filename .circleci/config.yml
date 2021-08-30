@@ -115,7 +115,7 @@ references:
   master_branch: &master_branch master
 
   rebar_cache_key: &rebar_cache_key rebar-cache-{{ checksum "rebar.lock" }}-{{ checksum "rebar.config" }}
-  restore_rebar_2ache: &restore_rebar_cache
+  restore_rebar_cache: &restore_rebar_cache
     restore_cache:
       key: *rebar_cache_key
 
