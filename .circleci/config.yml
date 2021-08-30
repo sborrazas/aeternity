@@ -115,7 +115,7 @@ references:
   master_branch: &master_branch master
 
   rebar_cache_key: &rebar_cache_key rebar-cache-{{ checksum "rebar.lock" }}-{{ checksum "rebar.config" }}
-  restore_rebar_cache: &restore_rebar_cache
+  restore_rebar_2ache: &restore_rebar_cache
     restore_cache:
       key: *rebar_cache_key
 
@@ -124,7 +124,7 @@ references:
     restore_cache:
       key: *build_otp22_cache_key
 
-  build_otp23_cache_key: &build_otp23_cache_key build-otp23-cache-v4-{{ .Revision }}
+  build_otp23_cache_key: &build_otp23_cache_key build-otp23-cache-v5-{{ .Revision }}
   restore_build_otp23_cache: &restore_build_otp23_cache
     restore_cache:
       key: *build_otp23_cache_key
@@ -134,13 +134,13 @@ references:
     restore_cache:
       key: *build_nix_cache_key
 
-  machine_build_cache_key: &machine_build_cache_key machine-build-cache-v19-{{ .Branch }}-{{ .Revision }}
+  machine_build_cache_key: &machine_build_cache_key machine-build-cache-v20-{{ .Branch }}-{{ .Revision }}
   restore_machine_build_cache: &restore_machine_build_cache
     restore_cache:
       keys:
         - *machine_build_cache_key
-        - machine-build-cache-v19-{{ .Branch }}-
-        - machine-build-cache-v19-
+        - machine-build-cache-v20-{{ .Branch }}-
+        - machine-build-cache-v20-
 
   save_machine_build_cache: &save_machine_build_cache
     save_cache:
@@ -824,14 +824,14 @@ jobs:
       - *restore_build_otp23_cache
       - restore_cache:
           keys:
-            - dialyzer-otp23-cache-v4-{{ .Branch }}-{{ .Revision }}
-            - dialyzer-otp23-cache-v4-{{ .Branch }}-
-            - dialyzer-otp23-cache-v4-
+            - dialyzer-otp23-cache-v5-{{ .Branch }}-{{ .Revision }}
+            - dialyzer-otp23-cache-v5-{{ .Branch }}-
+            - dialyzer-otp23-cache-v5-
       - run:
           name: Update dialyzer PLT
           command: make dialyzer-install
       - save_cache:
-          key: dialyzer-otp23-cache-v4-{{ .Branch }}-{{ .Revision }}
+          key: dialyzer-otp23-cache-v5-{{ .Branch }}-{{ .Revision }}
           paths:
             - *container_otp23_plt
       - run:
