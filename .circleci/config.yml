@@ -1353,6 +1353,11 @@ workflows:
                 - system-tests
 
       - build_nix:
+          filters:
+            branches:
+              ignore:
+                - env/dev1
+                - env/dev2
 
       - docker_smoke_tests:
           context: ae-node-builds
