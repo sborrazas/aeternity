@@ -249,7 +249,7 @@ jobs:
         - linux-package
       filters:
         branches:
-          only: master
+          only: << pipeline.parameters.master_branch >>
 
   - docker-image:
       name: docker-image-mainline

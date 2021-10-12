@@ -1446,7 +1446,7 @@ workflows:
                 env: integration
                 filters:
                     branches:
-                        only: master
+                        only: << pipeline.parameters.master_branch >>
                 name: deploy-integration
                 requires:
                     - test
