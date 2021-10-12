@@ -738,27 +738,17 @@ jobs:
             executor_tag:
                 default: unstable
                 type: string
+            version:
+                type: string
         steps:
             - fixed_checkout
             - attach_workspace:
                 at: << pipeline.parameters.packages_workspace >>
-            - when:
-                condition: << pipeline.git.tag >>
-                steps:
-                    - deploy_env:
-                        color: << parameters.color >>
-                        downtime: << parameters.downtime >>
-                        env: << parameters.env >>
-                        package_path: << pipeline.parameters.packages_workspace >>/aeternity-<< pipeline.git.tag >>-ubuntu-x86_64.tar.gz
-            - when:
-                condition:
-                    not: << pipeline.git.tag >>
-                steps:
-                    - deploy_env:
-                        color: << parameters.color >>
-                        downtime: << parameters.downtime >>
-                        env: << parameters.env >>
-                        package_path: << pipeline.parameters.packages_workspace >>/aeternity-<< pipeline.git.revision >>-ubuntu-x86_64.tar.gz
+            - deploy_env:
+                color: << parameters.color >>
+                downtime: << parameters.downtime >>
+                env: << parameters.env >>
+                package_path: << pipeline.parameters.packages_workspace >>/aeternity-<< parameters.version >>-ubuntu-x86_64.tar.gz
     docker-db-smoke-test:
         docker:
             - image: circleci/buildpack-deps:bionic
@@ -1457,6 +1447,7 @@ workflows:
                     - static-analysis
                     - rebar_lock_check
                     - linux-package
+                version: $CIRCLE_SHA1
             - docker-image:
                 context: ae-node-builds
                 filters:
@@ -1502,6 +1493,7 @@ workflows:
                     - static-analysis
                     - rebar_lock_check
                     - linux-package
+                version: $CIRCLE_SHA1
             - deploy:
                 context: ae-node-builds
                 env: dev1
@@ -1511,6 +1503,7 @@ workflows:
                 name: deploy-dev1
                 requires:
                     - linux-package
+                version: $CIRCLE_SHA1
             - deploy:
                 context: ae-node-builds
                 env: dev2
@@ -1520,6 +1513,7 @@ workflows:
                 name: deploy-dev2
                 requires:
                     - linux-package
+                version: $CIRCLE_SHA1
     release:
         jobs:
             - linux-package:
@@ -1625,6 +1619,7 @@ workflows:
                 requires:
                     - linux-package
                     - hodl_blue
+                version: $CIRCLE_TAG
             - hodl_green:
                 filters:
                     branches:
@@ -1647,6 +1642,7 @@ workflows:
                     - linux-package
                     - deploy-uat-blue
                     - hodl_green
+                version: $CIRCLE_TAG
             - hodl_latest:
                 filters:
                     branches:

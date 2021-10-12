@@ -100,6 +100,7 @@ jobs:
 
   - deploy:
       name: deploy-uat-blue
+      version: $CIRCLE_TAG
       env: uat
       color: blue
       downtime: 1800 #30m
@@ -123,6 +124,7 @@ jobs:
 
   - deploy:
       name: deploy-uat-green
+      version: $CIRCLE_TAG
       env: uat
       color: green
       downtime: 1800 #30m

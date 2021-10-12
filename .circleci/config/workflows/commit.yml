@@ -235,6 +235,7 @@ jobs:
 
   - deploy:
       name: deploy-integration
+      version: $CIRCLE_SHA1
       env: integration
       downtime: 900 #15m
       context: ae-node-builds
@@ -285,6 +286,7 @@ jobs:
 
   - deploy:
       name: deploy-next
+      version: $CIRCLE_SHA1
       env: next
       downtime: 900 #15m
       context: ae-node-builds
@@ -301,6 +303,7 @@ jobs:
 
   - deploy:
       name: deploy-dev1
+      version: $CIRCLE_SHA1
       env: dev1
       context: ae-node-builds
       requires:
@@ -311,6 +314,7 @@ jobs:
 
   - deploy:
       name: deploy-dev2
+      version: $CIRCLE_SHA1
       env: dev2
       context: ae-node-builds
       requires:

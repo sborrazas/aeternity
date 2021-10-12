@@ -1,5 +1,7 @@
 deploy:
   parameters:
+    version:
+      type: string
     env:
       type: string
     color:
@@ -16,20 +18,8 @@ deploy:
     - fixed_checkout
     - attach_workspace:
         at: << pipeline.parameters.packages_workspace >>
-    - when:
-        condition: << pipeline.git.tag >>
-        steps:
-        - deploy_env:
-            env: << parameters.env >>
-            color: << parameters.color >>
-            downtime: << parameters.downtime >>
-            package_path: << pipeline.parameters.packages_workspace >>/aeternity-<< pipeline.git.tag >>-ubuntu-x86_64.tar.gz
-    - when:
-        condition: 
-          not: << pipeline.git.tag >>
-        steps:
-        - deploy_env:
-            env: << parameters.env >>
-            color: << parameters.color >>
-            downtime: << parameters.downtime >>
-            package_path: << pipeline.parameters.packages_workspace >>/aeternity-<< pipeline.git.revision >>-ubuntu-x86_64.tar.gz
+    - deploy_env:
+        env: << parameters.env >>
+        color: << parameters.color >>
+        downtime: << parameters.downtime >>
+        package_path: << pipeline.parameters.packages_workspace >>/aeternity-<< parameters.version >>-ubuntu-x86_64.tar.gz
