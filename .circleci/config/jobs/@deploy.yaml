@@ -1,0 +1,35 @@
+deploy:
+  parameters:
+    env:
+      type: string
+    color:
+      type: string
+      default: ""
+    downtime:
+      type: integer
+      default: 0
+    executor_tag:
+      type: string
+      default: "unstable"
+  executor: infrastructure_container_<< parameters.executor_tag >>
+  steps:
+    - fixed_checkout
+    - attach_workspace:
+        at: << pipeline.parameters.packages_workspace >>
+    - when:
+        condition: << pipeline.git.tag >>
+        steps:
+        - deploy_env:
+            env: << parameters.env >>
+            color: << parameters.color >>
+            downtime: << parameters.downtime >>
+            package_path: << pipeline.parameters.packages_workspace >>/<< pipeline.git.tag >>-ubuntu-x86_64.tar.gz
+    - when:
+        condition: 
+          not: << pipeline.git.tag >>
+        steps:
+        - deploy_env:
+            env: << parameters.env >>
+            color: << parameters.color >>
+            downtime: << parameters.downtime >>
+            package_path: << pipeline.parameters.packages_workspace >>/<< pipeline.git.revision >>-ubuntu-x86_64.tar.gz

@@ -1,0 +1,240 @@
+jobs:
+  - linux-package:
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - linux-package:
+      name: linux-package-bundle
+      package_name_suffix: bundle
+      aeplugin_devmode: true
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - ubuntu_package:
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - osx_package:
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - osx_package:
+      name: osx_package_bundle
+      package_name_suffix: bundle
+      aeplugin_devmode: true
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - hodl_artifact_upload:
+      type: approval
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - upload-release-tarballs:
+      name: upload-release-tarballs
+      context: ae-node-builds
+      requires:
+        - linux-package
+        - osx_package
+        - hodl_artifact_upload
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - upload-release-tarballs:
+      name: upload-release-tarballs-bundle
+      suffix: -bundle
+      context: ae-node-builds
+      requires:
+        - linux-package
+        - osx_package
+        - hodl_artifact_upload
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - upload-release-tarballs-github:
+      name: upload-release-tarballs-github
+      context: ae-node-builds
+      requires:
+        - linux-package
+        - linux-package-bundle
+        - osx_package
+        - osx_package_bundle
+        - hodl_artifact_upload
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - hodl_blue:
+      type: approval
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - deploy:
+      name: deploy-uat-blue
+      env: uat
+      color: blue
+      downtime: 1800 #30m
+      context: ae-node-builds
+      requires:
+        - linux-package
+        - hodl_blue
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - hodl_green:
+      type: approval
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - deploy:
+      name: deploy-uat-green
+      env: uat
+      color: green
+      downtime: 1800 #30m
+      context: ae-node-builds
+      requires:
+        - linux-package
+        - deploy-uat-blue
+        - hodl_green
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - hodl_latest:
+      type: approval
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - upload-release-tarballs:
+      name: upload-latest-release-tarballs
+      suffix: -latest
+      context: ae-node-builds
+      requires:
+        - linux-package
+        - osx_package
+        - hodl_latest
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - publish-release-packages:
+      requires:
+        - linux-package
+        - osx_package
+        - hodl_latest
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - docker-image:
+      name: docker-image-tag
+      context: ae-node-builds
+      image_type: tag
+      requires:
+        - hodl_artifact_upload
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - docker-image:
+      name: docker-image-tag-bundle
+      context: ae-node-builds
+      aeplugin_devmode: true
+      image_type: tag
+      tag_suffix: -bundle
+      requires:
+        - hodl_artifact_upload
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - docker-image:
+      name: docker-image-latest
+      context: ae-node-builds
+      image_type: latest
+      requires:
+        - docker-image-tag
+        - hodl_latest
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - docker-image:
+      name: docker-image-latest-bundle
+      context: ae-node-builds
+      aeplugin_devmode: true
+      image_type: latest
+      tag_suffix: -bundle
+      requires:
+        - docker-image-tag
+        - hodl_latest
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>
+
+  - verify-artifacts:
+      name: verify-release-artifacts
+      context: ae-node-builds
+      requires:
+        - upload-release-tarballs
+        - upload-latest-release-tarballs
+        - upload-release-tarballs-github
+        - docker-image-tag
+        - docker-image-latest
+      filters:
+        branches:
+          ignore: /.*/
+        tags:
+          only: << pipeline.parameters.tag_regex >>

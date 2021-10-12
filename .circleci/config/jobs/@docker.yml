@@ -1,0 +1,39 @@
+docker-image:
+  executor: infrastructure_container_stable
+  parameters:
+    aeplugin_devmode:
+      type: boolean
+      default: false
+    image_type:
+      type: enum
+      enum: ["branch", "tag", "latest"]
+    tag_suffix:
+      type: string
+      default: ""
+  steps:
+    - fixed_checkout
+    - when:
+        condition: << parameters.aeplugin_devmode >>
+        steps:
+          - aeplugin_install_devmode
+    - setup_docker
+    - when:
+        condition:
+          equal: [ branch, << parameters.image_type >> ]
+        steps:
+          - docker_image:
+              tag: << pipeline.git.branch >><< parameters.tag_suffix>>
+    - when:
+        condition:
+          equal: [ tag, << parameters.image_type >> ]
+        steps:
+          - docker_image:
+              tag: << pipeline.git.tag >><< parameters.tag_suffix>>
+    - when:
+        condition:
+          equal: [ latest, << parameters.image_type >> ]
+        steps:
+          - docker_image:
+              tag: latest<< parameters.tag_suffix>>
+              tag_only: true
+    - fail_notification
