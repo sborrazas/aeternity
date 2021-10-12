@@ -23,7 +23,7 @@ deploy:
             env: << parameters.env >>
             color: << parameters.color >>
             downtime: << parameters.downtime >>
-            package_path: << pipeline.parameters.packages_workspace >>/<< pipeline.git.tag >>-ubuntu-x86_64.tar.gz
+            package_path: << pipeline.parameters.packages_workspace >>/aeternity-<< pipeline.git.tag >>-ubuntu-x86_64.tar.gz
     - when:
         condition: 
           not: << pipeline.git.tag >>
@@ -32,4 +32,4 @@ deploy:
             env: << parameters.env >>
             color: << parameters.color >>
             downtime: << parameters.downtime >>
-            package_path: << pipeline.parameters.packages_workspace >>/<< pipeline.git.revision >>-ubuntu-x86_64.tar.gz
+            package_path: << pipeline.parameters.packages_workspace >>/aeternity-<< pipeline.git.revision >>-ubuntu-x86_64.tar.gz
