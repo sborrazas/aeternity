@@ -16,19 +16,39 @@ docker_build:
   parameters:
     tag:
       type: string
+      default: ""
   steps:
-    - run:
-        name: Build docker image
-        command: |
-          docker pull aeternity/builder:bionic-otp22
-          docker build -t << pipeline.parameters.docker_repo >>:<< parameters.tag >> .
-    - run:
-        name: Start docker image
-        command: |
-          docker run -d -e AE__CHAIN__PERSIST -e AE__FORK_MANAGEMENT__NETWORK_ID \
-            --name ae_<< pipeline.git.revision >> \
-            << pipeline.parameters.docker_repo >>:<< parameters.tag >> \
-            bin/aeternity console -noinput -network_id ae_test
+    - when:
+        condition: << parameters.tag >>
+        steps:
+          - run:
+              name: Build docker image
+              command: |
+                docker pull aeternity/builder:bionic-otp22
+                docker build -t << pipeline.parameters.docker_repo >>:<< parameters.tag >> .
+          - run:
+              name: Start docker image
+              command: |
+                docker run -d -e AE__CHAIN__PERSIST -e AE__FORK_MANAGEMENT__NETWORK_ID \
+                  --name ae_<< pipeline.git.revision >> \
+                  << pipeline.parameters.docker_repo >>:<< parameters.tag >> \
+                  bin/aeternity console -noinput -network_id ae_test
+    - when:
+        condition:
+          not: << parameters.tag >>
+        steps:
+          - run:
+              name: Build docker image
+              command: |
+                docker pull aeternity/builder:bionic-otp22
+                docker build -t << pipeline.parameters.docker_repo >>:<< pipeline.git.tag >> .
+          - run:
+              name: Start docker image
+              command: |
+                docker run -d -e AE__CHAIN__PERSIST -e AE__FORK_MANAGEMENT__NETWORK_ID \
+                  --name ae_<< pipeline.git.revision >> \
+                  << pipeline.parameters.docker_repo >>:<< pipeline.git.tag >> \
+                  bin/aeternity console -noinput -network_id ae_test
     - run:
         name: Display logs from docker image
         command: |
