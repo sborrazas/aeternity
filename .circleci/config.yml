@@ -886,7 +886,7 @@ jobs:
             - fixed_checkout
             - setup_docker
             - docker_build:
-                tag: << pipeline.git.branch >>
+                tag: $CIRCLE_BRANCH
     docker-system-smoke-test:
         executor: machine_1604
         steps:

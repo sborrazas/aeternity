@@ -4,7 +4,7 @@ docker-smoke-test:
     - fixed_checkout
     - setup_docker
     - docker_build:
-        tag: << pipeline.git.branch >>
+        tag: $CIRCLE_BRANCH
 
 docker-system-test:
   executor: machine_1604
