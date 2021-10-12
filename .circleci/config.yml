@@ -104,40 +104,20 @@ commands:
     docker_build:
         parameters:
             tag:
-                default: ""
                 type: string
         steps:
-            - when:
-                condition: << parameters.tag >>
-                steps:
-                    - run:
-                        command: |
-                            docker pull aeternity/builder:bionic-otp22
-                            docker build -t << pipeline.parameters.docker_repo >>:<< parameters.tag >> .
-                        name: Build docker image
-                    - run:
-                        command: |
-                            docker run -d -e AE__CHAIN__PERSIST -e AE__FORK_MANAGEMENT__NETWORK_ID \
-                              --name ae_<< pipeline.git.revision >> \
-                              << pipeline.parameters.docker_repo >>:<< parameters.tag >> \
-                              bin/aeternity console -noinput -network_id ae_test
-                        name: Start docker image
-            - when:
-                condition:
-                    not: << parameters.tag >>
-                steps:
-                    - run:
-                        command: |
-                            docker pull aeternity/builder:bionic-otp22
-                            docker build -t << pipeline.parameters.docker_repo >>:<< pipeline.git.tag >> .
-                        name: Build docker image
-                    - run:
-                        command: |
-                            docker run -d -e AE__CHAIN__PERSIST -e AE__FORK_MANAGEMENT__NETWORK_ID \
-                              --name ae_<< pipeline.git.revision >> \
-                              << pipeline.parameters.docker_repo >>:<< pipeline.git.tag >> \
-                              bin/aeternity console -noinput -network_id ae_test
-                        name: Start docker image
+            - run:
+                command: |
+                    docker pull aeternity/builder:bionic-otp22
+                    docker build -t << pipeline.parameters.docker_repo >>:<< parameters.tag >> .
+                name: Build docker image
+            - run:
+                command: |
+                    docker run -d -e AE__CHAIN__PERSIST -e AE__FORK_MANAGEMENT__NETWORK_ID \
+                      --name ae_<< pipeline.git.revision >> \
+                      << pipeline.parameters.docker_repo >>:<< parameters.tag >> \
+                      bin/aeternity console -noinput -network_id ae_test
+                name: Start docker image
             - run:
                 background: true
                 command: |
@@ -889,7 +869,8 @@ jobs:
         steps:
             - fixed_checkout
             - setup_docker
-            - docker_build
+            - docker_build:
+                tag: $CIRCLE_BRANCH
             - run:
                 command: docker run -d --network container:ae_${CIRCLE_SHA1:?} --name nodejs circleci/node:15.0.0-buster sleep 1337
                 name: Start NodeJS
@@ -904,7 +885,8 @@ jobs:
         steps:
             - fixed_checkout
             - setup_docker
-            - docker_build
+            - docker_build:
+                tag: $CIRCLE_BRANCH
     docker-system-smoke-test:
         executor: machine_1604
         steps:
