@@ -223,6 +223,9 @@ dialyzer-install: endpoints
 dialyzer: endpoints 
 	@$(REBAR) dialyzer
 
+gradualizer: endpoints
+	@$(REBAR) gradualizer
+
 edoc: VERSION
 	@$(REBAR) edoc
 
