@@ -221,7 +221,7 @@ jobs:
       context: ae-node-builds
       aeplugin_devmode: true
       tag: latest-bundle
-      src: << parameters.src >>-bundle
+      asd: << parameters.src >>-bundle
       requires:
         - docker-image-tag
         - hodl_latest
