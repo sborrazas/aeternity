@@ -6,6 +6,8 @@ docker-image:
       default: false
     tag:
       type: string
+    src:
+      type: string
   steps:
     - fixed_checkout
     - when:
